@@ -37,11 +37,21 @@ app.use('/uploads', express.static(uploadDir));
 
 
 // MySQL டேட்டாபேஸ் இணைப்பு விபரங்கள்
+// const db = mysql.createConnection({
+//     host: 'localhost',
+//     user: 'root',      // உங்க MySQL யூசர்நேம் (வழக்கமாக root)
+//     password: 'root',      // உங்க MySQL பாஸ்வேர்ட் (இல்லைனா காலியாக விடவும்)
+//     database: 'jb_pos_db'
+// });
+
 const db = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',      // உங்க MySQL யூசர்நேம் (வழக்கமாக root)
-    password: 'root',      // உங்க MySQL பாஸ்வேர்ட் (இல்லைனா காலியாக விடவும்)
-    database: 'jb_pos_db'
+    host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
+    user: process.env.DB_USER || 'avnadmin',
+    password: process.env.DB_PASSWORD,
+    //password: process.env.DB_PASSWORD || 'AVNS_YTxkP6WgP4Ktj2jPk2L',
+    database: process.env.DB_NAME || 'jb_pos_db',
+    port: process.env.DB_PORT || 26228,
+    ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
 });
 
 db.connect((err) => {

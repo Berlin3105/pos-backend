@@ -62,7 +62,8 @@ app.use('/uploads', express.static(uploadDir));
 //     ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
 // });
 
-const isLocal = 'online' !== 'production' && !process.env.DB_HOST;
+//const isLocal = 'online' !== 'production' && !process.env.DB_HOST;
+const isLocal = 'False';
 
 const dbConfig = isLocal ? {
     // 💻 LOCAL DATABASE CONFIG (PC MySQL)

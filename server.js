@@ -62,7 +62,7 @@ app.use('/uploads', express.static(uploadDir));
 //     ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
 // });
 
-const isLocal = 'local' !== 'production' && !process.env.DB_HOST;
+const isLocal = 'online' !== 'production' && !process.env.DB_HOST;
 
 const dbConfig = isLocal ? {
     // 💻 LOCAL DATABASE CONFIG (PC MySQL)
@@ -526,8 +526,8 @@ db.query(tokenQuery, [order_date], (tokenErr, tokenResults) => {
                 }
                 
                 const orderId = result.insertId; //
-                const itemQuery = "INSERT INTO order_items (order_id, product_id, qty, rate, value) VALUES ?"; //
-                const itemValues = items.map(item => [orderId, item.product_id, item.qty, item.rate, item.value]); //
+                const itemQuery = "INSERT INTO order_items (order_id, product_id, qty, rate, value) VALUES ?";
+                const itemValues = items.map(item => [orderId, item.product_id, item.qty, item.rate, item.value]);
 
                 db.query(itemQuery, [itemValues], (err) => { //
                     if (err) { //
@@ -557,9 +557,9 @@ db.query(tokenQuery, [order_date], (tokenErr, tokenResults) => {
     });
 });
 
-// 3. அனைத்து ஆர்டர் பட்டியல் (List View வித் டேட் ஃபில்டர்)[cite: 18]
+// 3. ஆர்டர் பட்டியல் (Order Entry List View - Sales Entry பில்கள் தவிர்க்கப்பட்டது)
 app.get('/api/orders', (req, res) => {
-    const { from_date, to_date } = req.query; // ஃபிரண்ட் எண்டில் இருந்து வரும் தேதிகள்[cite: 18]
+    const { from_date, to_date } = req.query;
     
     let query = `
         SELECT 
@@ -568,13 +568,15 @@ app.get('/api/orders', (req, res) => {
             IFNULL(t.table_no, 'N/A') AS table_no 
         FROM orders o 
         LEFT JOIN waiters w ON o.waiter_id = w.id 
-        LEFT JOIN restaurant_tables t ON o.table_id = t.id `; //[cite: 18]
+        LEFT JOIN restaurant_tables t ON o.table_id = t.id 
+        WHERE (o.status IS NULL OR o.status != 'COMPLETED') 
+          AND o.id NOT IN (SELECT order_id FROM sales WHERE order_id IS NOT NULL) `;
 
     const queryParams = [];
 
-    // ஒருவேளை தேதிகள் அனுப்பப்பட்டிருந்தால் மட்டும் WHERE கண்டிஷன் சேர்க்கிறோம்[cite: 18]
+    // தேதிகள் அனுப்பப்பட்டிருந்தால் மட்டும் 추가 WHERE கண்டிஷன்
     if (from_date && to_date) {
-        query += ` WHERE o.order_date BETWEEN ? AND ? `;
+        query += ` AND o.order_date BETWEEN ? AND ? `;
         queryParams.push(from_date, to_date);
     }
 
@@ -814,7 +816,10 @@ function triggerKitchenKOTPrint(orderId) {
                         <tbody>`;
 
                 itemResults.forEach(item => {
-                    const displayProductName = (printLanguage === 'Tamil' && item.tamil_product_name) ? item.tamil_product_name : item.product_name;
+                    // 1. தயாரிப்பு பெயர் NULL-ஆக இருந்தால் 'Unknown Item' என வராமல் தடுக்கிறோம்
+                    const productName = item.product_name || item.tamil_product_name || `Item (${item.product_id})`;
+                    const displayProductName = (printLanguage === 'Tamil' && item.tamil_product_name) ? item.tamil_product_name : productName;
+
                     htmlContent += `
                         <tr>
                             <td class="bold" style="font-size: 16px;">${item.qty}</td>
@@ -891,6 +896,22 @@ app.get('/api/products', (req, res) => {
     });
 });
 
+app.get('/api/orders/pending-tokens', (req, res) => {
+    const query = `
+        SELECT o.id, o.token_no, o.net_value, o.table_id, t.table_no, w.waiter_name 
+        FROM orders o
+        LEFT JOIN restaurant_tables t ON o.table_id = t.id
+        LEFT JOIN waiters w ON o.waiter_id = w.id
+        WHERE o.id NOT IN (SELECT order_id FROM sales WHERE order_id IS NOT NULL)
+          AND (o.status IS NULL OR o.status != 'COMPLETED')
+        ORDER BY o.id DESC
+    `;
+    db.query(query, (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results);
+    });
+});
+
 // 1. ஒரு குறிப்பிட்ட ஆர்டரின் முழு விபரங்கள் மற்றும் அதன் ஐட்டங்களை எடிட் செய்ய எடுக்க
 app.get('/api/orders/:id', (req, res) => {
     const orderId = req.params.id;
@@ -913,6 +934,9 @@ app.get('/api/orders/:id', (req, res) => {
         });
     });
 });
+
+
+
 
 // 2. எடிட் செய்த ஆர்டரை டேட்டாபேஸில் அப்டேட் செய்ய (PUT Method)
 app.put('/api/orders/:id', (req, res) => {
@@ -1047,67 +1071,243 @@ app.delete('/api/setup/users/:id', (req, res) => {
     });
 });
 
-// 🎟️ 1. Pending Tokens API (இன்று போடப்பட்ட முடிக்கப்படாத ஆர்டர்களை மட்டும் எடுக்க)
-app.get('/api/orders/pending-tokens', (req, res) => {
-    const query = `
-        SELECT o.id, o.token_no, o.net_value, o.table_id, t.table_no, w.waiter_name 
-        FROM orders o
-        LEFT JOIN restaurant_tables t ON o.table_id = t.id
-        LEFT JOIN waiters w ON o.waiter_id = w.id
-        WHERE o.id NOT IN (SELECT order_id FROM sales WHERE order_id IS NOT NULL)
-          AND (o.status IS NULL OR o.status != 'COMPLETED')
-        ORDER BY o.id DESC
-    `;
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error("Error fetching pending tokens:", err);
-            return res.status(500).json({ error: err.message });
+// ==========================================
+// 💳 SALES MODULE APIS & AUTO BILL NUMBER
+// ==========================================
+
+// 1. நிதி ஆண்டைக் கணக்கிடும் Helper Function (Financial Year: Apr - Mar)
+function getCurrentFinancialYear() {
+    const today = new Date();
+    const month = today.getMonth() + 1; // 1 - 12
+    const year = today.getFullYear();
+    
+    let startYear = year;
+    let endYear = year + 1;
+
+    if (month < 4) { // Jan, Feb, Mar என்றால் முந்தைய நிதி ஆண்டு
+        startYear = year - 1;
+        endYear = year;
+    }
+
+    const fyStart = startYear.toString().slice(-2);
+    const fyEnd = endYear.toString().slice(-2);
+
+    return `${fyStart}-${fyEnd}`; // எ.கா: "26-27"
+}
+
+// 2. அடுத்த Sales Bill No பெற (எ.கா: S 26-27/1)
+app.get('/api/sales/next-bill-no', (req, res) => {
+    const fy = getCurrentFinancialYear();
+    const prefix = `S ${fy}/`;
+
+    const query = "SELECT bill_no FROM sales WHERE bill_no LIKE ? ORDER BY id DESC LIMIT 1";
+    db.query(query, [`${prefix}%`], (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        let nextNo = 1;
+        if (results.length > 0 && results[0].bill_no) {
+            const lastBill = results[0].bill_no;
+            const parts = lastBill.split('/');
+            if (parts.length > 1) {
+                nextNo = parseInt(parts[1]) + 1;
+            }
         }
+        res.json({ bill_no: `${prefix}${nextNo}` });
+    });
+});
+
+// 3. Sales Bill Save, Complete & Print Logic
+app.post('/api/sales', (req, res) => {
+    const { order_id, token_no, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned, items } = req.body;
+    const isDirectBilling = !token_no; 
+
+    const fy = getCurrentFinancialYear();
+    const prefix = `S ${fy}/`;
+
+    db.query("SELECT bill_no FROM sales WHERE bill_no LIKE ? ORDER BY id DESC LIMIT 1", [`${prefix}%`], (bErr, bResults) => {
+        let nextNo = 1;
+        if (!bErr && bResults.length > 0 && bResults[0].bill_no) {
+            const parts = bResults[0].bill_no.split('/');
+            if (parts.length > 1) nextNo = parseInt(parts[1]) + 1;
+        }
+        const finalBillNo = `${prefix}${nextNo}`;
+
+        const processSave = (fToken, fOrderId) => {
+            const salesQuery = `
+                INSERT INTO sales (bill_no, order_id, token_no, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned, sales_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            `;
+
+            db.query(salesQuery, [finalBillNo, fOrderId, fToken, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned], (sErr, sResult) => {
+                if (sErr) return res.status(500).json({ error: sErr.message });
+
+                const salesId = sResult.insertId;
+
+                if (fOrderId) {
+                    db.query("UPDATE orders SET status = 'COMPLETED' WHERE id = ?", [fOrderId]);
+                }
+
+                res.json({ success: true, sales_id: salesId, bill_no: finalBillNo });
+
+                // 🖨️ PRINT LOGIC
+                setTimeout(() => {
+                    if (fOrderId) {
+                        if (isDirectBilling) {
+                            // Direct Counter Billing எனில் வாடிக்கையாளர் பில் + கிச்சன் KOT இரண்டும் பிரிண்ட் ஆகும்
+                            triggerCustomerBillPrint(fOrderId);
+                            triggerKitchenKOTPrint(fOrderId);
+                        } else {
+                            // Token Billing எனில் வாடிக்கையாளர் பில் மட்டும் பிரிண்ட் ஆகும்
+                            triggerCustomerBillPrint(fOrderId);
+                        }
+                    }
+                }, 500);
+            });
+        };
+
+        if (isDirectBilling) {
+            const todayDate = new Date().toISOString().slice(0, 10);
+            const currentTime = new Date().toTimeString().slice(0, 8);
+
+            db.query("SELECT token_no FROM orders WHERE order_date = ? ORDER BY id DESC LIMIT 1", [todayDate], (tErr, tResults) => {
+                let nextToken = 1;
+                if (!tErr && tResults.length > 0 && tResults[0].token_no) {
+                    nextToken = parseInt(tResults[0].token_no) + 1;
+                }
+                const newTokNo = String(nextToken).padStart(3, '0');
+
+                db.query("SELECT order_no FROM orders ORDER BY id DESC LIMIT 1", (oErr, oResults) => {
+                    let nextOrderNo = "00001";
+                    if (!oErr && oResults.length > 0) {
+                        nextOrderNo = String(parseInt(oResults[0].order_no) + 1).padStart(5, '0');
+                    }
+
+                    // NULL values-ஐ தெளிவாக அனுப்ப table_id மற்றும் waiter_id handling சேர்க்கப்பட்டுள்ளது
+                    const finalTableId = table_id || null;
+                    const insOrderQuery = `
+                        INSERT INTO orders 
+                        (order_pfx, order_no, token_no, order_date, order_time, waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, status) 
+                        VALUES ('ORD', ?, ?, ?, ?, NULL, ?, 'NON_AC', ?, 0, 0, ?, 'COMPLETED')
+                    `;
+
+                    db.query(insOrderQuery, [nextOrderNo, newTokNo, todayDate, currentTime, finalTableId, gross_value, net_payable], (ioErr, ioResult) => {
+                        if (ioErr) {
+                            console.error("❌ Direct Billing Order Error:", ioErr.message); // Console-ல் துல்லியமான எரர் பார்க்க
+                            return res.status(500).json({ error: ioErr.message });
+                        }
+                        
+                        const newOrderId = ioResult.insertId;
+                        const itemValues = items.map(i => [newOrderId, i.product_id, i.qty, i.rate, i.value]);
+                        
+                        db.query("INSERT INTO order_items (order_id, product_id, qty, rate, value) VALUES ?", [itemValues], (itemErr) => {
+                            if (itemErr) {
+                                console.error("❌ Direct Billing Order Items Error:", itemErr.message);
+                                return res.status(500).json({ error: itemErr.message });
+                            }
+                            processSave(newTokNo, newOrderId);
+                        });
+                    });
+                });
+            });
+        } else {
+            processSave(token_no, order_id);
+        }
+    });
+});
+
+// 4. Sales List எடுக்க (With Date Range Filter)
+app.get('/api/sales', (req, res) => {
+    const { from_date, to_date } = req.query;
+    let query = `
+        SELECT s.*, IFNULL(t.table_no, 'Counter') as table_no 
+        FROM sales s 
+        LEFT JOIN restaurant_tables t ON s.table_id = t.id
+    `;
+    const params = [];
+
+    if (from_date && to_date) {
+        query += ` WHERE DATE(s.sales_date) BETWEEN ? AND ? `;
+        params.push(from_date, to_date);
+    }
+    query += ` ORDER BY s.id DESC`;
+
+    db.query(query, params, (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
         res.json(results);
     });
 });
 
-// 💳 Sales Entry Save API (Pending Token இல்லையென்றாலும் புது Token தானாக உருவாகும்)
-app.post('/api/sales', (req, res) => {
-    const { order_id, token_no, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned, items } = req.body;
+// 🗑️ Sales Bill Delete - Smart Logic (Direct Sales & Token Sales)
+app.delete('/api/sales/:id', async (req, res) => {
+    const salesId = req.params.id;
 
-    const saveSalesProcess = (finalTokenNo, finalOrderId) => {
-        const query = `
-          INSERT INTO sales (order_id, token_no, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned, sales_date)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-        `;
+    try {
+        // 1. Sales விபரங்களை எடுக்கிறோம்
+        const [salesRows] = await db.promise().query(
+            "SELECT order_id, token_no FROM sales WHERE id = ?", 
+            [salesId]
+        );
 
-        db.query(query, [finalOrderId, finalTokenNo, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned], (err, salesResult) => {
-            if (err) {
-                console.error("Error saving sales:", err);
-                return res.status(500).json({ error: err.message });
+        if (salesRows.length === 0) {
+            return res.status(404).json({ error: "Sales bill not found!" });
+        }
+
+        const { order_id } = salesRows[0];
+
+        await db.promise().beginTransaction();
+
+        // 2. Sales டேபிளிலிருந்து பில்லை நீக்குகிறோம்
+        await db.promise().query("DELETE FROM sales WHERE id = ?", [salesId]);
+
+        if (order_id) {
+            // 3. Check order attributes to determine direct sales vs token sales
+            const [orderRows] = await db.promise().query(
+                "SELECT order_type, waiter_id FROM orders WHERE id = ?", 
+                [order_id]
+            );
+
+            // If no waiter assigned or order_type indicates direct counter sale
+            if (orderRows.length > 0 && (!orderRows[0].waiter_id || orderRows[0].order_type === 'DIRECT')) {
+                // Direct Sales: Delete associated Order & Items completely
+                await db.promise().query("DELETE FROM order_items WHERE order_id = ?", [order_id]);
+                await db.promise().query("DELETE FROM orders WHERE id = ?", [order_id]);
+            } else {
+                // Token / Table Sales: Reset order status back to PENDING
+                await db.promise().query(
+                    "UPDATE orders SET status = 'PENDING' WHERE id = ?", 
+                    [order_id]
+                );
             }
+        }
 
-            if (finalOrderId) {
-                db.query(`UPDATE orders SET status = 'COMPLETED' WHERE id = ?`, [finalOrderId], (updateErr) => {
-                    if (updateErr) console.error("Error updating order status:", updateErr);
-                });
-            }
+        await db.promise().commit();
+        res.json({ message: "Sales bill deleted and order status updated successfully!" });
 
-            res.json({ success: true, sales_id: salesResult.insertId, token_no: finalTokenNo });
-        });
-    };
-
-    // ஒருவேளை Pending Token இல்லாமல் நேரடியாக SalesCounter-ல் பில் போட்டால்:
-    if (!token_no) {
-        const todayDate = new Date().toISOString().slice(0, 10);
-        db.query("SELECT token_no FROM orders WHERE order_date = ? ORDER BY id DESC LIMIT 1", [todayDate], (tErr, tResults) => {
-            let nextToken = 1;
-            if (tResults && tResults.length > 0 && tResults[0].token_no) {
-                nextToken = parseInt(tResults[0].token_no) + 1;
-            }
-            const generatedToken = String(nextToken).padStart(3, '0');
-            saveSalesProcess(generatedToken, order_id || null);
-        });
-    } else {
-        saveSalesProcess(token_no, order_id);
+    } catch (err) {
+        await db.promise().rollback();
+        console.error("Error deleting sales:", err);
+        res.status(500).json({ error: err.message });
     }
 });
+
+app.get('/api/sales/reprint/:id', (req, res) => {
+    const salesId = req.params.id;
+    db.query("SELECT order_id FROM sales WHERE id = ?", [salesId], (err, results) => {
+        if (err || results.length === 0) return res.status(404).json({ error: "Sales bill not found" });
+        
+        const orderId = results[0].order_id;
+        if (orderId) {
+            // வாடிக்கையாளர் பில்லை பிரிண்ட் செய்ய தூண்டுகிறது
+            triggerCustomerBillPrint(orderId);
+            res.json({ message: "Re-print triggered successfully!" });
+        } else {
+            res.status(400).json({ error: "No associated order found for re-print" });
+        }
+    });
+});
+
+
+
 
 // சர்வர் போர்ட் ரன் செய்தல்
 const PORT = 5000;

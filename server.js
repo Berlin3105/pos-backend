@@ -133,7 +133,7 @@ app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
 
     // 💡 இங்க சாதாரண db.query-க்கு பதிலா .promise().query() பயன்படுத்தியிருக்கோம் தலைவா!
-    const [rows] = await db.promise().query(
+    const [rows] = await db.query(
       "SELECT id, username, role, linked_waiters FROM users WHERE username = ? AND password = ?", 
       [username, password]
     );

@@ -59,7 +59,7 @@ const db = mysql.createConnection({
     //password: process.env.DB_PASSWORD || 'AVNS_YTxkP6WgP4Ktj2jPk2L',
     database: process.env.DB_NAME || 'jb_pos_db',
     port: process.env.DB_PORT || 26228,
-    ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
+    ssl: { rejectUnauthorized: false }
 });
 
 //const isLocal = 'online' !== 'production' && !process.env.DB_HOST;

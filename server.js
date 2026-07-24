@@ -1,5 +1,5 @@
 const express = require('express');
-const mysql = require('mysql2/promise');
+const mysql = require('mysql2');
 const cors = require('cors');
 require('dotenv').config();
 
@@ -52,15 +52,15 @@ app.use('/uploads', express.static(uploadDir));
 //     database: 'jb_pos_db'
 // });
 
-const db = mysql.createConnection({
-    host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
-    user: process.env.DB_USER || 'avnadmin',
-    password: process.env.DB_PASSWORD,
-    //password: process.env.DB_PASSWORD || 'AVNS_YTxkP6WgP4Ktj2jPk2L',
-    database: process.env.DB_NAME || 'jb_pos_db',
-    port: process.env.DB_PORT || 26228,
-    ssl: { rejectUnauthorized: false }
-});
+// const db = mysql.createConnection({
+//     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
+//     user: process.env.DB_USER || 'avnadmin',
+//     password: process.env.DB_PASSWORD,
+//     //password: process.env.DB_PASSWORD || 'AVNS_YTxkP6WgP4Ktj2jPk2L',
+//     database: process.env.DB_NAME || 'jb_pos_db',
+//     port: process.env.DB_PORT || 26228,
+//     ssl: { rejectUnauthorized: false }
+// });
 
 // const db = mysql.createConnection({
 //     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
@@ -133,7 +133,7 @@ app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
 
     // 💡 இங்க சாதாரண db.query-க்கு பதிலா .promise().query() பயன்படுத்தியிருக்கோம் தலைவா!
-    const [rows] = await db.query(
+    const [rows] = await db.promise().query(
       "SELECT id, username, role, linked_waiters FROM users WHERE username = ? AND password = ?", 
       [username, password]
     );

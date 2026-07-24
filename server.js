@@ -52,15 +52,6 @@ app.use('/uploads', express.static(uploadDir));
 //     database: 'jb_pos_db'
 // });
 
-// const db = mysql.createConnection({
-//     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
-//     user: process.env.DB_USER || 'avnadmin',
-//     password: process.env.DB_PASSWORD,
-//     //password: process.env.DB_PASSWORD || 'AVNS_YTxkP6WgP4Ktj2jPk2L',
-//     database: process.env.DB_NAME || 'jb_pos_db',
-//     port: process.env.DB_PORT || 26228,
-//     ssl: { rejectUnauthorized: false }
-// });
 
 // const db = mysql.createConnection({
 //     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
@@ -74,56 +65,56 @@ app.use('/uploads', express.static(uploadDir));
 
 
 //const isLocal = 'online' !== 'production' && !process.env.DB_HOST;
-// const isLocal = 'True';
+const isLocal = 'False';
 
-// const dbConfig = isLocal ? {
-//     // 💻 LOCAL DATABASE CONFIG (PC MySQL)
-//     host: 'localhost',
-//     user: 'root',
-//     password: 'root', // Unga PC local MySQL password
-//     database: 'jb_pos_db',
-// } : {
-//     // 🌐 ONLINE DATABASE CONFIG (Aiven Cloud)
-//     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
-//     user: process.env.DB_USER || 'avnadmin',
-//     password: process.env.DB_PASSWORD, // Render env variable or fallback
-//     database: process.env.DB_NAME || 'jb_pos_db',
-//     port: process.env.DB_PORT || 26228,
-//     ssl: { rejectUnauthorized: false }
-// };
-
-// const db = mysql.createConnection(dbConfig);
-
-
-// db.connect((err) => {
-//     if (err) {
-//         console.error('Database connection failed: ' + err.stack);
-//         return;
-//     }
-//     console.log('Connected to MySQL Database successfully.');
-// });
-
-const db = mysql.createPool({
+const dbConfig = isLocal ? {
+    // 💻 LOCAL DATABASE CONFIG (PC MySQL)
+    host: 'localhost',
+    user: 'root',
+    password: 'root', // Unga PC local MySQL password
+    database: 'jb_pos_db',
+} : {
+    // 🌐 ONLINE DATABASE CONFIG (Aiven Cloud)
     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
     user: process.env.DB_USER || 'avnadmin',
-    password: process.env.DB_PASSWORD,
+    password: process.env.DB_PASSWORD, // Render env variable or fallback
     database: process.env.DB_NAME || 'jb_pos_db',
     port: process.env.DB_PORT || 26228,
-    ssl: { rejectUnauthorized: false },
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
+    ssl: { rejectUnauthorized: false }
+};
 
-// Test the pool connection on start
-db.getConnection((err, connection) => {
+const db = mysql.createConnection(dbConfig);
+
+
+db.connect((err) => {
     if (err) {
-        console.error('Database connection failed:', err.message);
+        console.error('Database connection failed: ' + err.stack);
         return;
     }
-    console.log('Connected to Aiven MySQL Database successfully via Pool.');
-    connection.release(); // Release connection back to pool
+    console.log('Connected to MySQL Database successfully.');
 });
+
+// const db = mysql.createPool({
+//     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
+//     user: process.env.DB_USER || 'avnadmin',
+//     password: process.env.DB_PASSWORD,
+//     database: process.env.DB_NAME || 'jb_pos_db',
+//     port: process.env.DB_PORT || 26228,
+//     ssl: { rejectUnauthorized: false },
+//     waitForConnections: true,
+//     connectionLimit: 10,
+//     queueLimit: 0
+// });
+
+// // Test the pool connection on start
+// db.getConnection((err, connection) => {
+//     if (err) {
+//         console.error('Database connection failed:', err.message);
+//         return;
+//     }
+//     console.log('Connected to Aiven MySQL Database successfully via Pool.');
+//     connection.release(); // Release connection back to pool
+// });
 
 // ====================================================================
 // 🔐 Node.js Backend Login Controller (அசின்்க்ரோனஸ் எர்ரர் சரிசெய்யப்பட்டது)

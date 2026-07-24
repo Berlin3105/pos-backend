@@ -52,7 +52,6 @@ app.use('/uploads', express.static(uploadDir));
 //     database: 'jb_pos_db'
 // });
 
-<<<<<<< HEAD
 const db = mysql.createConnection({
     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
     user: process.env.DB_USER || 'avnadmin',
@@ -62,7 +61,7 @@ const db = mysql.createConnection({
     port: process.env.DB_PORT || 26228,
     ssl: { rejectUnauthorized: false }
 });
-=======
+
 // const db = mysql.createConnection({
 //     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
 //     user: process.env.DB_USER || 'avnadmin',
@@ -72,7 +71,7 @@ const db = mysql.createConnection({
 //     port: process.env.DB_PORT || 26228,
 //     ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
 // });
->>>>>>> c273b6a (Updated backend API URL)
+
 
 //const isLocal = 'online' !== 'production' && !process.env.DB_HOST;
 // const isLocal = 'True';

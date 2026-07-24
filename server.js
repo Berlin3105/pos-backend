@@ -1,5 +1,5 @@
 const express = require('express');
-const mysql = require('mysql2/promise');
+const mysql = require('mysql2');
 const cors = require('cors');
 require('dotenv').config();
 
@@ -52,34 +52,34 @@ app.use('/uploads', express.static(uploadDir));
 //     database: 'jb_pos_db'
 // });
 
-// const db = mysql.createConnection({
-//     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
-//     user: process.env.DB_USER || 'avnadmin',
-//     password: process.env.DB_PASSWORD,
-//     //password: process.env.DB_PASSWORD || 'AVNS_YTxkP6WgP4Ktj2jPk2L',
-//     database: process.env.DB_NAME || 'jb_pos_db',
-//     port: process.env.DB_PORT || 26228,
-//     ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
-// });
-
-//const isLocal = 'online' !== 'production' && !process.env.DB_HOST;
-const isLocal = 'False';
-
-const dbConfig = isLocal ? {
-    // 💻 LOCAL DATABASE CONFIG (PC MySQL)
-    host: 'localhost',
-    user: 'root',
-    password: 'root', // Unga PC local MySQL password
-    database: 'jb_pos_db',
-} : {
-    // 🌐 ONLINE DATABASE CONFIG (Aiven Cloud)
+const db = mysql.createConnection({
     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
     user: process.env.DB_USER || 'avnadmin',
-    password: process.env.DB_PASSWORD, // Render env variable or fallback
+    password: process.env.DB_PASSWORD,
+    //password: process.env.DB_PASSWORD || 'AVNS_YTxkP6WgP4Ktj2jPk2L',
     database: process.env.DB_NAME || 'jb_pos_db',
     port: process.env.DB_PORT || 26228,
-    ssl: { rejectUnauthorized: false }
-};
+    ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
+});
+
+//const isLocal = 'online' !== 'production' && !process.env.DB_HOST;
+// const isLocal = 'False';
+
+// const dbConfig = isLocal ? {
+//     // 💻 LOCAL DATABASE CONFIG (PC MySQL)
+//     host: 'localhost',
+//     user: 'root',
+//     password: 'root', // Unga PC local MySQL password
+//     database: 'jb_pos_db',
+// } : {
+//     // 🌐 ONLINE DATABASE CONFIG (Aiven Cloud)
+//     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
+//     user: process.env.DB_USER || 'avnadmin',
+//     password: process.env.DB_PASSWORD, // Render env variable or fallback
+//     database: process.env.DB_NAME || 'jb_pos_db',
+//     port: process.env.DB_PORT || 26228,
+//     ssl: { rejectUnauthorized: false }
+// };
 
 const db = mysql.createConnection(dbConfig);
 

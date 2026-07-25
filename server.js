@@ -75,11 +75,11 @@ const dbConfig = isLocal ? {
     database: 'jb_pos_db',
 } : {
     // 🌐 ONLINE DATABASE CONFIG (Aiven Cloud)
-    host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
-    user: process.env.DB_USER || 'avnadmin',
+    host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
+    user: process.env.DB_USER || 'HojFcYtE4maWpx7.root',
     password: process.env.DB_PASSWORD, // Render env variable or fallback
     database: process.env.DB_NAME || 'jb_pos_db',
-    port: process.env.DB_PORT || 26228,
+    port: process.env.DB_PORT || 4000,
     ssl: { rejectUnauthorized: false }
 };
 

@@ -1,26 +1,23 @@
 const express = require('express');
-const mysql = require('mysql2');
+const mysql = require('mysql2/promise');
 const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { getPrinters, print } = require('pdf-to-printer');
+const pdf = require('html-pdf');
 require('dotenv').config();
 
 const app = express();
 
+// Middleware Configuration
 app.use(cors({
     origin: '*', // Allow requests from Vercel frontend
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-
-app.use(cors());
 app.use(express.json()); // JSON டேட்டாவை படிக்க
-
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-
-const { getPrinters } = require('pdf-to-printer');
-const pdf = require('html-pdf');
 
 // இமேஜ் சேமிக்க 'uploads' ஃபோல்டரை புரோகிராம் லொகேஷனில் உருவாக்குகிறோம்
 const uploadDir = path.join(__dirname, 'uploads');
@@ -52,7 +49,6 @@ app.use('/uploads', express.static(uploadDir));
 //     database: 'jb_pos_db'
 // });
 
-
 // const db = mysql.createConnection({
 //     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
 //     user: process.env.DB_USER || 'avnadmin',
@@ -62,7 +58,6 @@ app.use('/uploads', express.static(uploadDir));
 //     port: process.env.DB_PORT || 26228,
 //     ssl: { rejectUnauthorized: false }
 // });
-
 
 // const db = mysql.createConnection({
 //     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
@@ -76,66 +71,65 @@ app.use('/uploads', express.static(uploadDir));
 
 
 //const isLocal = 'online' !== 'production' && !process.env.DB_HOST;
-const isLocal = 'False';
+// const isLocal = 'True';
 
-const dbConfig = isLocal ? {
-    // 💻 LOCAL DATABASE CONFIG (PC MySQL)
-    host: 'localhost',
-    user: 'root',
-    password: 'root', // Unga PC local MySQL password
-    database: 'jb_pos_db',
-} : {
-    // 🌐 ONLINE DATABASE CONFIG (Aiven Cloud)
-    host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
-    user: process.env.DB_USER || 'HojFcYtE4maWpx7.root',
-    password: process.env.DB_PASSWORD, // Render env variable or fallback
-    database: process.env.DB_NAME || 'jb_pos_db',
-    port: process.env.DB_PORT || 4000,
-    ssl: { rejectUnauthorized: false }
-};
-
-const db = mysql.createConnection(dbConfig);
-
-
-db.connect((err) => {
-    if (err) {
-        console.error('Database connection failed: ' + err.stack);
-        return;
-    }
-    console.log('Connected to MySQL Database successfully.');
-});
-
-// const db = mysql.createPool({
+// const dbConfig = isLocal ? {
+//     // 💻 LOCAL DATABASE CONFIG (PC MySQL)
+//     host: 'localhost',
+//     user: 'root',
+//     password: 'root', // Unga PC local MySQL password
+//     database: 'jb_pos_db',
+// } : {
+//     // 🌐 ONLINE DATABASE CONFIG (Aiven Cloud)
 //     host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
 //     user: process.env.DB_USER || 'avnadmin',
-//     password: process.env.DB_PASSWORD,
+//     password: process.env.DB_PASSWORD, // Render env variable or fallback
 //     database: process.env.DB_NAME || 'jb_pos_db',
 //     port: process.env.DB_PORT || 26228,
-//     ssl: { rejectUnauthorized: false },
-//     waitForConnections: true,
-//     connectionLimit: 10,
-//     queueLimit: 0
-// });
+//     ssl: { rejectUnauthorized: false }
+// };
 
-// // Test the pool connection on start
-// db.getConnection((err, connection) => {
+// const db = mysql.createConnection(dbConfig);
+
+
+// db.connect((err) => {
 //     if (err) {
-//         console.error('Database connection failed:', err.message);
+//         console.error('Database connection failed: ' + err.stack);
 //         return;
 //     }
-//     console.log('Connected to Aiven MySQL Database successfully via Pool.');
-//     connection.release(); // Release connection back to pool
+//     console.log('Connected to MySQL Database successfully.');
 // });
 
+const db = mysql.createPool({
+    host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
+    user: process.env.DB_USER || 'avnadmin',
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME || 'jb_pos_db',
+    port: process.env.DB_PORT || 26228,
+    ssl: { rejectUnauthorized: false },
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+});
+
+// Test the pool connection on start
+db.getConnection((err, connection) => {
+    if (err) {
+        console.error('Database connection failed:', err.message);
+        return;
+    }
+    console.log('Connected to Aiven MySQL Database successfully via Pool.');
+    connection.release(); // Release connection back to pool
+});
+
 // ====================================================================
-// 🔐 Node.js Backend Login Controller (அசின்்க்ரோனஸ் எர்ரர் சரிசெய்யப்பட்டது)
+// 🔐 Node.js Backend Login Controller
 // ====================================================================
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    // 💡 இங்க சாதாரண db.query-க்கு பதிலா .promise().query() பயன்படுத்தியிருக்கோம் தலைவா!
-    const [rows] = await db.promise().query(
+    const [rows] = await db.query(
       "SELECT id, username, role, linked_waiters FROM users WHERE username = ? AND password = ?", 
       [username, password]
     );
@@ -143,7 +137,6 @@ app.post('/api/auth/login', async (req, res) => {
     if (rows && rows.length > 0) {
       const user = rows[0];
       
-      // டேட்டாபேஸிலிருந்து வரும் JSON ஸ்ட்ரிங்கை ஃபிரண்ட்-எண்டிற்காக அரே-வாக மாற்றி அனுப்புகிறோம்
       let linkedWaitersArray = [];
       if (user.linked_waiters) {
         try {
@@ -151,7 +144,6 @@ app.post('/api/auth/login', async (req, res) => {
             ? JSON.parse(user.linked_waiters) 
             : user.linked_waiters;
         } catch (e) {
-          // ஒருவேளை கமா பிரிக்கப்பட்ட ஸ்ட்ரிங்காக இருந்தால் (எ.கா: "1,2")
           linkedWaitersArray = String(user.linked_waiters).split(',').map(Number);
         }
       }
@@ -166,476 +158,466 @@ app.post('/api/auth/login', async (req, res) => {
       res.status(401).json({ error: "Invalid username or password!" });
     }
   } catch (err) {
-    console.error("Login API Error:", err);
-    res.status(500).json({ error: err.message });
+    // 💡 Print full error details to Render logs
+    console.error("Login API Detailed Error:", err.message, err.stack);
+    res.status(500).json({ error: err.message || "Database Connection Failed" });
   }
 });
 
 // 1. புதிய லெட்ஜர் ஐடி தானாக உருவாக்க (Get Next Auto Ledger ID)
-app.get('/api/ledgers/next-id', (req, res) => {
-    const currentYear = new Date().getFullYear().toString().slice(-2); // 2026 -> "26"
-    const idPrefix = `ID${currentYear}/`;
+app.get('/api/ledgers/next-id', async (req, res) => {
+    try {
+        const currentYear = new Date().getFullYear().toString().slice(-2); 
+        const idPrefix = `ID${currentYear}/`;
 
-    // இந்த வருடத்தின் அதிகபட்ச ஐடியைக் கண்டறியும் கொரி
-    const query = "SELECT ledger_id FROM ledgers WHERE ledger_id LIKE ? ORDER BY id DESC LIMIT 1";
-    db.query(query, [`${idPrefix}%`], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+        const query = "SELECT ledger_id FROM ledgers WHERE ledger_id LIKE ? ORDER BY id DESC LIMIT 1";
+        const [results] = await db.query(query, [`${idPrefix}%`]);
 
         let nextNumber = 1;
         if (results.length > 0) {
-            const lastId = results[0].ledger_id; // எ.கா: "ID26/5"
-            const lastNumber = parseInt(lastId.split('/')[1]); // "5"
+            const lastId = results[0].ledger_id; 
+            const lastNumber = parseInt(lastId.split('/')[1]); 
             nextNumber = lastNumber + 1;
         }
 
         res.json({ nextId: `${idPrefix}${nextNumber}` });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // 2. புதிய லெட்ஜர் சேமிக்க (Create Ledger)
-app.post('/api/ledgers', (req, res) => {
-    const { ledger_id, ledger_name, mobile_no, email_id, gstno, address } = req.body;
-    const query = "INSERT INTO ledgers (ledger_id, ledger_name, mobile_no, email_id, gstno, address) VALUES (?, ?, ?, ?, ?, ?)";
-    
-    db.query(query, [ledger_id, ledger_name, mobile_no, email_id, gstno, address], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.post('/api/ledgers', async (req, res) => {
+    try {
+        const { ledger_id, ledger_name, mobile_no, email_id, gstno, address } = req.body;
+        const query = "INSERT INTO ledgers (ledger_id, ledger_name, mobile_no, email_id, gstno, address) VALUES (?, ?, ?, ?, ?, ?)";
+        await db.query(query, [ledger_id, ledger_name, mobile_no, email_id, gstno, address]);
         res.json({ message: "Ledger created successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // 3. அனைத்து லெட்ஜர்களையும் எடுக்க (Read All Ledgers)
-app.get('/api/ledgers', (req, res) => {
-    // [சரிசெய்யப்பட்டது]: அனைத்து விபரங்களும் ஃபிரண்ட் எண்டிற்கு கிடைக்க '*' பயன்படுத்தப்பட்டுள்ளது
-    db.query("SELECT * FROM ledgers ORDER BY ledger_name ASC", (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/ledgers', async (req, res) => {
+    try {
+        const [results] = await db.query("SELECT * FROM ledgers ORDER BY ledger_name ASC");
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // 4. லெட்ஜர் விபரங்களை மாற்றியமைக்க (Update Ledger)
-app.put('/api/ledgers/:id', (req, res) => {
-    const { id } = req.params;
-    const { ledger_name, mobile_no, email_id, gstno, address } = req.body;
-    const query = "UPDATE ledgers SET ledger_name=?, mobile_no=?, email_id=?, gstno=?, address=? WHERE id=?";
-
-    db.query(query, [ledger_name, mobile_no, email_id, gstno, address, id], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.put('/api/ledgers/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { ledger_name, mobile_no, email_id, gstno, address } = req.body;
+        const query = "UPDATE ledgers SET ledger_name=?, mobile_no=?, email_id=?, gstno=?, address=? WHERE id=?";
+        await db.query(query, [ledger_name, mobile_no, email_id, gstno, address, id]);
         res.json({ message: "Ledger updated successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // 5. லெட்ஜரை நீக்க (Delete Ledger)
-app.delete('/api/ledgers/:id', (req, res) => {
-    const { id } = req.params;
-    db.query("DELETE FROM ledgers WHERE id = ?", [id], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.delete('/api/ledgers/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.query("DELETE FROM ledgers WHERE id = ?", [id]);
         res.json({ message: "Ledger deleted successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ==========================================
 // PRODUCT SETUP API MODULE
 // ==========================================
 
-// 1. விடுபட்ட அல்லது அடுத்த தயாரிப்பு குறியீட்டை எடுக்க (Get Next Unique Product Code)
-app.get('/api/products/next-code', (req, res) => {
-    const query = "SELECT product_code FROM products ORDER BY product_code ASC";
-    db.query(query, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-
-        const existingCodes = results.map(r => r.product_code);
+// 1. விடுபட்ட அல்லது அடுத்த தயாரிப்பு குறியீட்டை எடுக்க
+app.get('/api/products/next-code', async (req, res) => {
+    try {
+        const [results] = await db.query("SELECT product_code FROM products ORDER BY product_code ASC");
+        const existingCodes = results.map(r => Number(r.product_code));
         let nextCode = 1;
-        
-        // வரிசையாகச் சரிபார்த்து விடுபட்ட முதல் எண்ணைக் கண்டறியும் (e.g., 1, 2, 4 என்றால் 3 வரும்)
         while (existingCodes.includes(nextCode)) {
             nextCode++;
         }
         res.json({ nextCode });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // 2. புதிய தயாரிப்பைச் சேமிக்க (Create Product)
-app.post('/api/products', (req, res) => {
-    const { product_code, product_name, tamil_product_name, ac_rate, non_ac_rate, hsn_code, product_group, tamil_product_group, unit } = req.body;
-    const query = `INSERT INTO products (product_code, product_name, tamil_product_name, ac_rate, non_ac_rate, hsn_code, product_group, tamil_product_group, unit) 
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    
-    db.query(query, [product_code, product_name, tamil_product_name, ac_rate, non_ac_rate, hsn_code, product_group, tamil_product_group, unit], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.post('/api/products', async (req, res) => {
+    try {
+        const { product_code, product_name, tamil_product_name, ac_rate, non_ac_rate, hsn_code, product_group, tamil_product_group, unit } = req.body;
+        const query = `INSERT INTO products (product_code, product_name, tamil_product_name, ac_rate, non_ac_rate, hsn_code, product_group, tamil_product_group, unit) 
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        await db.query(query, [product_code, product_name, tamil_product_name, ac_rate, non_ac_rate, hsn_code, product_group, tamil_product_group, unit]);
         res.json({ message: "Product created successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 3. அனைத்து தயாரிப்புகளையும் எடுக்க (Read All Products)
-app.get('/api/products', (req, res) => {
-    db.query("SELECT * FROM products ORDER BY product_code ASC", (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+// 3. அனைத்து தயாரிப்புகளையும் எடுக்க
+app.get('/api/products', async (req, res) => {
+    try {
+        const [results] = await db.query("SELECT * FROM products ORDER BY product_code ASC");
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 4. தயாரிப்பு விபரங்களை மாற்றியமைக்க (Update Product)
-app.put('/api/products/:id', (req, res) => {
-    const { id } = req.params;
-    const { product_name, tamil_product_name, ac_rate, non_ac_rate, hsn_code, product_group, tamil_product_group, unit } = req.body;
-    const query = `UPDATE products SET product_name=?, tamil_product_name=?, ac_rate=?, non_ac_rate=?, hsn_code=?, product_group=?, tamil_product_group=?, unit=? WHERE id=?`;
-
-    db.query(query, [product_name, tamil_product_name, ac_rate, non_ac_rate, hsn_code, product_group, tamil_product_group, unit, id], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+// 4. தயாரிப்பு விபரங்களை மாற்றியமைக்க
+app.put('/api/products/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { product_name, tamil_product_name, ac_rate, non_ac_rate, hsn_code, product_group, tamil_product_group, unit } = req.body;
+        const query = `UPDATE products SET product_name=?, tamil_product_name=?, ac_rate=?, non_ac_rate=?, hsn_code=?, product_group=?, tamil_product_group=?, unit=? WHERE id=?`;
+        await db.query(query, [product_name, tamil_product_name, ac_rate, non_ac_rate, hsn_code, product_group, tamil_product_group, unit, id]);
         res.json({ message: "Product updated successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 5. தயாரிப்பை நீக்க (Delete Product)
-app.delete('/api/products/:id', (req, res) => {
-    const { id } = req.params;
-    db.query("DELETE FROM products WHERE id = ?", [id], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+// 5. தயாரிப்பை நீக்க
+app.delete('/api/products/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.query("DELETE FROM products WHERE id = ?", [id]);
         res.json({ message: "Product deleted successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-
-// 6. ஆங்கில தயாரிப்பு குழுக்களை மட்டும் எடுக்க (Get Unique English Groups)
-app.get('/api/products/groups-en', (req, res) => {
-    const query = "SELECT product_group FROM products WHERE product_group IS NOT NULL AND product_group != '' GROUP BY product_group";
-    db.query(query, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+// 6. ஆங்கில தயாரிப்பு குழுக்களை மட்டும் எடுக்க
+app.get('/api/products/groups-en', async (req, res) => {
+    try {
+        const query = "SELECT product_group FROM products WHERE product_group IS NOT NULL AND product_group != '' GROUP BY product_group";
+        const [results] = await db.query(query);
         res.json(results.map(r => r.product_group));
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 7. தமிழ் தயாரிப்பு குழுக்களை மட்டும் எடுக்க (Get Unique Tamil Groups)
-app.get('/api/products/groups-ta', (req, res) => {
-    const query = "SELECT tamil_product_group FROM products WHERE tamil_product_group IS NOT NULL AND tamil_product_group != '' GROUP BY tamil_product_group";
-    db.query(query, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+// 7. தமிழ் தயாரிப்பு குழுக்களை மட்டும் எடுக்க
+app.get('/api/products/groups-ta', async (req, res) => {
+    try {
+        const query = "SELECT tamil_product_group FROM products WHERE tamil_product_group IS NOT NULL AND tamil_product_group != '' GROUP BY tamil_product_group";
+        const [results] = await db.query(query);
         res.json(results.map(r => r.tamil_product_group));
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 1. சிஸ்டமில் உள்ள அனைத்து பிரிண்டர்களின் பெயர்களை மட்டும் எடுத்து அனுப்பும் புதிய API
+// 1. சிஸ்டமில் உள்ள பிரிண்டர்கள்
 app.get('/api/system-printers', async (req, res) => {
     try {
-        const printers = await getPrinters(); //[cite: 12]
+        const printers = await getPrinters();
         const printerNames = printers.map(p => p.name);
         res.json(printerNames);
     } catch (err) {
         console.error("Error fetching system printers:", err);
-        res.json([]); // எரர் வந்தால் காலியாக அனுப்பும்
+        res.json([]);
     }
 });
 
-// 2. [மாற்றப்பட்ட API]: கம்பெனியைச் சேமிக்க அல்லது புதுப்பிக்க (Save or Update Single Company)
-app.post('/api/companies/save-single', upload.single('image'), (req, res) => { //[cite: 12]
-    const { 
-        id, company_name, address1, address2, address3, state, state_code, 
-        mobile_no, phone_no, gst_no, email_no, cash_in_hand_account, sales_account, existing_image,
-        kot_printer, sales_printer, report_printer, kot_lang, sales_lang // 👈 புதிய ஃபீல்டுகள்
-    } = req.body; //[cite: 12]
-    
-    let image_path = req.file ? `uploads/${req.file.filename}` : (existing_image || null); //[cite: 12]
+// 2. கம்பெனியைச் சேமிக்க அல்லது புதுப்பிக்க
+app.post('/api/companies/save-single', upload.single('image'), async (req, res) => {
+    try {
+        const { 
+            id, company_name, address1, address2, address3, state, state_code, 
+            mobile_no, phone_no, gst_no, email_no, cash_in_hand_account, sales_account, existing_image,
+            kot_printer, sales_printer, report_printer, kot_lang, sales_lang 
+        } = req.body;
+        
+        let image_path = req.file ? `uploads/${req.file.filename}` : (existing_image || null);
+        const cashAccountValue = (cash_in_hand_account && cash_in_hand_account !== 'null' && cash_in_hand_account !== '') ? cash_in_hand_account : null;
+        const salesAccountValue = (sales_account && sales_account !== 'null' && sales_account !== '') ? sales_account : null;
 
-    const cashAccountValue = (cash_in_hand_account && cash_in_hand_account !== 'null' && cash_in_hand_account !== '') ? cash_in_hand_account : null; //[cite: 12]
-    const salesAccountValue = (sales_account && sales_account !== 'null' && sales_account !== '') ? sales_account : null; //[cite: 12]
-
-    if (id && id !== 'null' && id !== '') { //[cite: 12]
-        // ஏற்கனவே கம்பெனி இருந்தால் UPDATE செய்கிறோம்
-        const query = `
-            UPDATE companies SET 
-            company_name=?, address1=?, address2=?, address3=?, state=?, state_code=?, mobile_no=?, phone_no=?, gst_no=?, email_no=?, image_path=?, cash_in_hand_account=?, sales_account=?,
-            kot_printer=?, sales_printer=?, report_printer=?, kot_lang=?, sales_lang=? 
-            WHERE id=?
-        `; //[cite: 12]
-        db.query(query, [
-            company_name, address1, address2, address3, state, state_code, mobile_no, phone_no, gst_no, email_no, image_path, cashAccountValue, salesAccountValue, 
-            kot_printer, sales_printer, report_printer, kot_lang, sales_lang, id // 👈 புதிய வேல்யூஸ்
-        ], (err, result) => { //[cite: 12]
-            if (err) return res.status(500).json({ error: err.message }); //[cite: 12]
-            res.json({ message: "Company Setup Updated Successfully!" }); //[cite: 12]
-        });
-    } else {
-        // புதிய பதிவு என்றால் INSERT செய்கிறோம்
-        const query = `
-            INSERT INTO companies 
-            (company_name, address1, address2, address3, state, state_code, mobile_no, phone_no, gst_no, email_no, image_path, cash_in_hand_account, sales_account, kot_printer, sales_printer, report_printer, kot_lang, sales_lang) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `; //[cite: 12]
-        db.query(query, [
-            company_name, address1, address2, address3, state, state_code, mobile_no, phone_no, gst_no, email_no, image_path, cashAccountValue, salesAccountValue,
-            kot_printer, sales_printer, report_printer, kot_lang, sales_lang // 👈 புதிய வேல்யூஸ்
-        ], (err, result) => { //[cite: 12]
-            if (err) return res.status(500).json({ error: err.message }); //[cite: 12]
-            res.json({ message: "Company Setup Saved Successfully!" }); //[cite: 12]
-        });
+        if (id && id !== 'null' && id !== '') {
+            const query = `
+                UPDATE companies SET 
+                company_name=?, address1=?, address2=?, address3=?, state=?, state_code=?, mobile_no=?, phone_no=?, gst_no=?, email_no=?, image_path=?, cash_in_hand_account=?, sales_account=?,
+                kot_printer=?, sales_printer=?, report_printer=?, kot_lang=?, sales_lang=? 
+                WHERE id=?
+            `;
+            await db.query(query, [
+                company_name, address1, address2, address3, state, state_code, mobile_no, phone_no, gst_no, email_no, image_path, cashAccountValue, salesAccountValue, 
+                kot_printer, sales_printer, report_printer, kot_lang, sales_lang, id
+            ]);
+            res.json({ message: "Company Setup Updated Successfully!" });
+        } else {
+            const query = `
+                INSERT INTO companies 
+                (company_name, address1, address2, address3, state, state_code, mobile_no, phone_no, gst_no, email_no, image_path, cash_in_hand_account, sales_account, kot_printer, sales_printer, report_printer, kot_lang, sales_lang) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `;
+            await db.query(query, [
+                company_name, address1, address2, address3, state, state_code, mobile_no, phone_no, gst_no, email_no, image_path, cashAccountValue, salesAccountValue,
+                kot_printer, sales_printer, report_printer, kot_lang, sales_lang
+            ]);
+            res.json({ message: "Company Setup Saved Successfully!" });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
-// 3. [மாற்றப்பட்ட API]: கம்பெனி விபரங்களை எடுக்கும் போது புதிய காலம்களும் தானாக வரும்
-app.get('/api/companies/single', (req, res) => { //[cite: 12]
-    const query = `
-        SELECT c.*, 
-               l1.ledger_name as cash_ledger_name, 
-               l1.ledger_id as cash_ledger_string_id,
-               l2.ledger_name as sales_ledger_name,
-               l2.ledger_id as sales_ledger_string_id
-        FROM companies c
-        LEFT JOIN ledgers l1 ON c.cash_in_hand_account = l1.id
-        LEFT JOIN ledgers l2 ON c.sales_account = l2.id
-        LIMIT 1
-    `; //[cite: 12]
-    db.query(query, (err, results) => { //[cite: 12]
-        if (err) return res.status(500).json({ error: err.message }); //[cite: 12]
-        res.json(results[0] || null); //[cite: 12]
-    });
+// 3. கம்பெனி விபரங்களை எடுக்க
+app.get('/api/companies/single', async (req, res) => {
+    try {
+        const query = `
+            SELECT c.*, 
+                   l1.ledger_name as cash_ledger_name, 
+                   l1.ledger_id as cash_ledger_string_id,
+                   l2.ledger_name as sales_ledger_name,
+                   l2.ledger_id as sales_ledger_string_id
+            FROM companies c
+            LEFT JOIN ledgers l1 ON c.cash_in_hand_account = l1.id
+            LEFT JOIN ledgers l2 ON c.sales_account = l2.id
+            LIMIT 1
+        `;
+        const [results] = await db.query(query);
+        res.json(results[0] || null);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ==========================================
 // WAITER SETUP APIS
 // ==========================================
 
-// 1. அடுத்த Waiter ID ஆட்டோ-இன்க்ரிமென்ட் வடிவில் பெற (Get Next Waiter ID)
-app.get('/api/waiters/next-id', (req, res) => {
-    db.query("SELECT waiter_id FROM waiters ORDER BY id DESC LIMIT 1", (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        
-        let nextId = "W-001"; // முதல் பதிவாக இருந்தால்
+app.get('/api/waiters/next-id', async (req, res) => {
+    try {
+        const [results] = await db.query("SELECT waiter_id FROM waiters ORDER BY id DESC LIMIT 1");
+        let nextId = "W-001"; 
         if (results.length > 0) {
-            const lastId = results[0].waiter_id; // எ.கா: W-001
-            const lastNum = parseInt(lastId.split('-')[1]); // 001 -> 1
+            const lastId = results[0].waiter_id; 
+            const lastNum = parseInt(lastId.split('-')[1]); 
             const nextNum = lastNum + 1;
-            nextId = `W-${String(nextNum).padStart(3, '0')}`; // W-002
+            nextId = `W-${String(nextNum).padStart(3, '0')}`; 
         }
         res.json({ nextId });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 2. அனைத்து Waiters பட்டியலையும் எடுக்க (Get All Waiters)
-app.get('/api/waiters', (req, res) => {
-    db.query("SELECT * FROM waiters ORDER BY id DESC", (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/waiters', async (req, res) => {
+    try {
+        const [results] = await db.query("SELECT * FROM waiters ORDER BY id DESC");
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 3. புதிய Waiter-ஐச் சேர்க்க (Create Waiter)
-app.post('/api/waiters', (req, res) => {
-    const { waiter_id, waiter_name, tamil_waiter_name } = req.body;
-    const query = "INSERT INTO waiters (waiter_id, waiter_name, tamil_waiter_name) VALUES (?, ?, ?)";
-    db.query(query, [waiter_id, waiter_name, tamil_waiter_name || null], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.post('/api/waiters', async (req, res) => {
+    try {
+        const { waiter_id, waiter_name, tamil_waiter_name } = req.body;
+        const query = "INSERT INTO waiters (waiter_id, waiter_name, tamil_waiter_name) VALUES (?, ?, ?)";
+        await db.query(query, [waiter_id, waiter_name, tamil_waiter_name || null]);
         res.json({ message: "Waiter Saved Successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 4. Waiter விபரங்களை மாற்றியமைக்க (Update Waiter)
-app.put('/api/waiters/:id', (req, res) => {
-    const { id } = req.params;
-    const { waiter_name, tamil_waiter_name } = req.body;
-    const query = "UPDATE waiters SET waiter_name = ?, tamil_waiter_name = ? WHERE id = ?";
-    db.query(query, [waiter_name, tamil_waiter_name || null, id], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.put('/api/waiters/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { waiter_name, tamil_waiter_name } = req.body;
+        const query = "UPDATE waiters SET waiter_name = ?, tamil_waiter_name = ? WHERE id = ?";
+        await db.query(query, [waiter_name, tamil_waiter_name || null, id]);
         res.json({ message: "Waiter Updated Successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 5. Waiter-ஐ நீக்க (Delete Waiter)
-app.delete('/api/waiters/:id', (req, res) => {
-    const { id } = req.params;
-    db.query("DELETE FROM waiters WHERE id = ?", [id], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.delete('/api/waiters/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.query("DELETE FROM waiters WHERE id = ?", [id]);
         res.json({ message: "Waiter Deleted Successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ==========================================
 // TABLE SETUP APIS
 // ==========================================
 
-// 1. அனைத்து டேபிள்களின் பட்டியலையும் எடுக்க (Get All Tables)
-app.get('/api/tables', (req, res) => {
-    db.query("SELECT * FROM restaurant_tables ORDER BY CAST(table_no AS UNSIGNED) ASC, table_no ASC", (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/tables', async (req, res) => {
+    try {
+        const [results] = await db.query("SELECT * FROM restaurant_tables ORDER BY CAST(table_no AS UNSIGNED) ASC, table_no ASC");
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 2. புதிய Table-ஐச் சேர்க்க (Create Table with Duplicate Check)
-app.post('/api/tables', (req, res) => {
-    const { table_no } = req.body;
-    
-    // ஏற்கனவே இந்த டேபிள் நம்பர் இருக்கிறதா என்று செக் செய்கிறோம்
-    db.query("SELECT * FROM restaurant_tables WHERE table_no = ?", [table_no], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.post('/api/tables', async (req, res) => {
+    try {
+        const { table_no } = req.body;
+        const [results] = await db.query("SELECT * FROM restaurant_tables WHERE table_no = ?", [table_no]);
         
         if (results.length > 0) {
             return res.status(400).json({ error: "Table Number already exists!" });
         }
         
-        const query = "INSERT INTO restaurant_tables (table_no) VALUES (?)";
-        db.query(query, [table_no], (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: "Table Saved Successfully!" });
-        });
-    });
+        await db.query("INSERT INTO restaurant_tables (table_no) VALUES (?)", [table_no]);
+        res.json({ message: "Table Saved Successfully!" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 3. Table விபரங்களை மாற்றியமைக்க (Update Table with Duplicate Check)
-app.put('/api/tables/:id', (req, res) => {
-    const { id } = req.params;
-    const { table_no } = req.body;
-    
-    // எடிட் செய்யும் போது, தனது சொந்த ஐடியைத் தவிர வேறு யாருக்கும் இதே டேபிள் நம்பர் இருக்கிறதா என செக் செய்கிறோம்
-    db.query("SELECT * FROM restaurant_tables WHERE table_no = ? AND id != ?", [table_no, id], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.put('/api/tables/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { table_no } = req.body;
         
+        const [results] = await db.query("SELECT * FROM restaurant_tables WHERE table_no = ? AND id != ?", [table_no, id]);
         if (results.length > 0) {
             return res.status(400).json({ error: "Table Number already exists!" });
         }
         
-        const query = "UPDATE restaurant_tables SET table_no = ? WHERE id = ?";
-        db.query(query, [table_no, id], (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: "Table Updated Successfully!" });
-        });
-    });
+        await db.query("UPDATE restaurant_tables SET table_no = ? WHERE id = ?", [table_no, id]);
+        res.json({ message: "Table Updated Successfully!" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 4. Table-ஐ நீக்க (Delete Table)
-app.delete('/api/tables/:id', (req, res) => {
-    const { id } = req.params;
-    db.query("DELETE FROM restaurant_tables WHERE id = ?", [id], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.delete('/api/tables/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.query("DELETE FROM restaurant_tables WHERE id = ?", [id]);
         res.json({ message: "Table Deleted Successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ==========================================
 // ORDER POS SETUP APIS
 // ==========================================
 
-// அடுத்த Order No பெற (இது தொடர்ந்து ஏறிக்கொண்டே போகும் பில் நம்பர்)
-app.get('/api/orders/next-no', (req, res) => {
-    // தேதியைப் பார்க்காமல் டேட்டாபேஸின் கடைசி பில் எண்ணை மட்டும் எடுக்கிறோம்
-    db.query("SELECT order_no FROM orders ORDER BY id DESC LIMIT 1", (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/orders/next-no', async (req, res) => {
+    try {
+        const [results] = await db.query("SELECT order_no FROM orders ORDER BY id DESC LIMIT 1");
         let nextNo = 1;
         if (results.length > 0) {
             const lastNo = parseInt(results[0].order_no);
-            nextNo = lastNo + 1; // தொடர்ந்து கூட்டப்படுகிறது
+            if (!isNaN(lastNo)) nextNo = lastNo + 1;
         }
-        res.json({ nextNo: String(nextNo).padStart(5, '0') }); // எ.கா: 00043
-    });
+        res.json({ nextNo: String(nextNo).padStart(5, '0') });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.post('/api/orders', (expressReq, expressRes) => {
-    const { order_pfx, order_no, order_date, order_time, waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, items } = expressReq.body; //
+app.post('/api/orders', async (req, res) => {
+    const connection = await db.getConnection();
+    try {
+        const { order_pfx, order_no, order_date, order_time, waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, items, is_print } = req.body;
 
-    // POST /api/orders ஏபிஐ-க்குள் இந்த பகுதியை மட்டும் மாற்றவும்:
-const tokenQuery = "SELECT token_no FROM orders WHERE order_date = ? ORDER BY id DESC LIMIT 1";
+        const [tokenResults] = await connection.query("SELECT token_no FROM orders WHERE order_date = ? ORDER BY id DESC LIMIT 1", [order_date]);
 
-db.query(tokenQuery, [order_date], (tokenErr, tokenResults) => {
-    if (tokenErr) return expressRes.status(500).json({ error: tokenErr.message });
-
-    let nextToken = 1; // இன்று முதல் பில் என்றால் டோக்கன் 1
-    
-    if (tokenResults.length > 0 && tokenResults[0].token_no) {
-        const lastTokenParsed = parseInt(tokenResults[0].token_no);
-        // ஒருவேளை பழைய டேட்டா ஏதேனும் தவறாக இருந்தால் பாதுகாப்பிற்கு ஒரு செக்:
-        if (!isNaN(lastTokenParsed)) {
-            nextToken = lastTokenParsed + 1;
+        let nextToken = 1; 
+        if (tokenResults.length > 0 && tokenResults[0].token_no) {
+            const lastTokenParsed = parseInt(tokenResults[0].token_no);
+            if (!isNaN(lastTokenParsed)) nextToken = lastTokenParsed + 1;
         }
-    }
-    
-    // 3 இலக்க டோக்கன் நம்பர் (எ.கா: 001, 002)
-    const finalTokenNo = String(nextToken).padStart(3, '0');
+        const finalTokenNo = String(nextToken).padStart(3, '0');
 
-        db.beginTransaction(err => { //
-            if (err) return expressRes.status(500).json({ error: err.message }); //
+        await connection.beginTransaction();
 
-            // 🎯 இங்க 'token_no' காலமையும் சேர்த்து இன்செர்ட் செய்கிறோம்
-            const orderQuery = "INSERT INTO orders (order_pfx, order_no, token_no, order_date, order_time, waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"; //
-            
-            db.query(orderQuery, [order_pfx, order_no, finalTokenNo, order_date, order_time, waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value], (err, result) => { //
-                if (err) { //
-                    return db.rollback(() => expressRes.status(500).json({ error: err.message })); //
-                }
-                
-                const orderId = result.insertId; //
-                const itemQuery = "INSERT INTO order_items (order_id, product_id, qty, rate, value) VALUES ?";
-                const itemValues = items.map(item => [orderId, item.product_id, item.qty, item.rate, item.value]);
+        const orderQuery = "INSERT INTO orders (order_pfx, order_no, token_no, order_date, order_time, waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        const [result] = await connection.query(orderQuery, [order_pfx, order_no, finalTokenNo, order_date, order_time, waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value]);
+        
+        const orderId = result.insertId;
+        const itemQuery = "INSERT INTO order_items (order_id, product_id, qty, rate, value) VALUES ?";
+        const itemValues = items.map(item => [orderId, item.product_id, item.qty, item.rate, item.value]);
 
-                db.query(itemQuery, [itemValues], (err) => { //
-                    if (err) { //
-                        return db.rollback(() => expressRes.status(500).json({ error: err.message })); //
-                    }
+        await connection.query(itemQuery, [itemValues]);
+        await connection.commit();
 
-                    db.commit(err => { //
-                        if (err) return db.rollback(() => expressRes.status(500).json({ error: err.message })); //
-                        
-                        const { is_print } = expressReq.body; //
-
-                        expressRes.json({ 
-                            message: "Order Processed Successfully!", 
-                            orderId: orderId 
-                        }); //
-
-                        if (is_print === true || is_print === undefined) { //
-                            setTimeout(() => { //
-                                triggerCustomerBillPrint(orderId); //
-                                triggerKitchenKOTPrint(orderId); //
-                            }, 500); //
-                        }
-                    });
-                });
-            });
+        res.json({ 
+            message: "Order Processed Successfully!", 
+            orderId: orderId 
         });
-    });
-});
 
-// 3. ஆர்டர் பட்டியல் (Order Entry List View - Sales Entry பில்கள் தவிர்க்கப்பட்டது)
-app.get('/api/orders', (req, res) => {
-    const { from_date, to_date } = req.query;
-    
-    let query = `
-        SELECT 
-            o.*, 
-            IFNULL(w.waiter_name, 'Unknown') AS waiter_name, 
-            IFNULL(t.table_no, 'N/A') AS table_no 
-        FROM orders o 
-        LEFT JOIN waiters w ON o.waiter_id = w.id 
-        LEFT JOIN restaurant_tables t ON o.table_id = t.id 
-        WHERE (o.status IS NULL OR o.status != 'COMPLETED') 
-          AND o.id NOT IN (SELECT order_id FROM sales WHERE order_id IS NOT NULL) `;
-
-    const queryParams = [];
-
-    // தேதிகள் அனுப்பப்பட்டிருந்தால் மட்டும் 추가 WHERE கண்டிஷன்
-    if (from_date && to_date) {
-        query += ` AND o.order_date BETWEEN ? AND ? `;
-        queryParams.push(from_date, to_date);
+        if (is_print === true || is_print === undefined) {
+            setTimeout(() => {
+                triggerCustomerBillPrint(orderId);
+                triggerKitchenKOTPrint(orderId);
+            }, 500);
+        }
+    } catch (err) {
+        await connection.rollback();
+        res.status(500).json({ error: err.message });
+    } finally {
+        connection.release();
     }
+});
 
-    query += ` ORDER BY o.id DESC`;
+app.get('/api/orders', async (req, res) => {
+    try {
+        const { from_date, to_date } = req.query;
+        let query = `
+            SELECT 
+                o.*, 
+                IFNULL(w.waiter_name, 'Unknown') AS waiter_name, 
+                IFNULL(t.table_no, 'N/A') AS table_no 
+            FROM orders o 
+            LEFT JOIN waiters w ON o.waiter_id = w.id 
+            LEFT JOIN restaurant_tables t ON o.table_id = t.id 
+            WHERE (o.status IS NULL OR o.status != 'COMPLETED') 
+              AND o.id NOT IN (SELECT order_id FROM sales WHERE order_id IS NOT NULL) `;
 
-    db.query(query, queryParams, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+        const queryParams = [];
+        if (from_date && to_date) {
+            query += ` AND o.order_date BETWEEN ? AND ? `;
+            queryParams.push(from_date, to_date);
+        }
+        query += ` ORDER BY o.id DESC`;
+
+        const [results] = await db.query(query, queryParams);
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 4. ஆர்டர் நீக்குதல்
-app.delete('/api/orders/:id', (req, res) => {
-    db.query("DELETE FROM orders WHERE id = ?", [req.params.id], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.delete('/api/orders/:id', async (req, res) => {
+    try {
+        await db.query("DELETE FROM orders WHERE id = ?", [req.params.id]);
         res.json({ message: "Order Deleted Successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 🖨️ 1. CUSTOMER BILL - தொகையுடன் (Amount) சிஸ்டத்தின் Default பிரிண்டரில் பிரிண்ட் ஆகும் ஃபங்க்ஷன்
-function triggerCustomerBillPrint(orderId) {
-    db.query("SELECT * FROM companies LIMIT 1", (err, companyResults) => {
-        if (err || companyResults.length === 0) return;
+// 🖨️ 1. CUSTOMER BILL PRINT
+async function triggerCustomerBillPrint(orderId) {
+    try {
+        const [companyResults] = await db.query("SELECT * FROM companies LIMIT 1");
+        if (companyResults.length === 0) return;
         const company = companyResults[0];
 
         const orderQuery = `
@@ -643,707 +625,631 @@ function triggerCustomerBillPrint(orderId) {
             FROM orders o
             LEFT JOIN waiters w ON o.waiter_id = w.id
             WHERE o.id = ?`;
+        const [orderResults] = await db.query(orderQuery, [orderId]);
+        if (orderResults.length === 0) return;
+        const order = orderResults[0];
 
-        db.query(orderQuery, [orderId], (err, orderResults) => {
-            if (err || orderResults.length === 0) return;
-            const order = orderResults[0];
+        const itemsQuery = `
+            SELECT oi.*, p.product_name, p.tamil_product_name 
+            FROM order_items oi
+            JOIN products p ON oi.product_id = p.id
+            WHERE oi.order_id = ?`;
+        const [itemResults] = await db.query(itemsQuery, [orderId]);
 
-            const itemsQuery = `
-                SELECT oi.*, p.product_name, p.tamil_product_name 
-                FROM order_items oi
-                JOIN products p ON oi.product_id = p.id
-                WHERE oi.order_id = ?`;
+        const totalQty = itemResults.reduce((sum, item) => sum + Number(item.qty), 0);
+        const printLanguage = company.sales_lang || 'English';
+        const displayWaiter = (printLanguage === 'Tamil' && order.tamil_waiter_name) ? order.tamil_waiter_name : order.waiter_name;
 
-            db.query(itemsQuery, [orderId], (err, itemResults) => {
-                if (err) return;
+        let htmlContent = `
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Hind+Madurai:wght@400;700&display=swap');
+                body { width: 280px; margin: 0; padding: 5px; font-family: 'Hind Madurai', sans-serif; font-size: 13px; color: #000; }
+                .center { text-align: center; }
+                .bold { font-weight: bold; }
+                .title { font-size: 18px; margin-bottom: 2px; text-transform: uppercase; }
+                .subtitle { font-size: 12px; margin-bottom: 10px; }
+                .line { border-top: 1px dashed #000; margin: 5px 0; }
+                .info-table, .items-table { width: 100%; border-collapse: collapse; }
+                .info-table td { padding: 2px 0; font-size: 12px; }
+                .items-table th { border-bottom: 1px dashed #000; text-align: left; padding: 4px 0; font-size: 12px; }
+                .items-table td { padding: 4px 0; vertical-align: top; }
+                .right { text-align: right; }
+                .total-section { font-size: 14px; margin-top: 5px; }
+            </style>
+        </head>
+        <body>
+            <div class="center">
+                <span class="bold title">${company.company_name}</span><br/>
+                <span class="subtitle">${company.address1 || ''} ${company.address2 || ''}</span>
+                ${company.gst_no ? `<br/><span class="subtitle">GSTIN: ${company.gst_no}</span>` : ''}
+            </div>
+            <div class="line"></div>
+            <table class="info-table">
+                <tr>
+                    <td><b>Order No:</b> ${order.order_pfx || ''}${order.order_no}</td>
+                    <td class="right"><b>Table:</b> ${order.table_no ? 'Table ' + order.table_no : 'N/A'}</td>
+                </tr>
+                <tr>
+                    <td><b>Date:</b> ${order.order_date}</td>
+                    <td class="right"><b>Time:</b> ${order.order_time}</td>
+                </tr>
+                <tr>
+                    <td><b>Waiter:</b> ${displayWaiter || 'N/A'}</td>
+                </tr>
+                <tr>
+                    <td class="right"><span style="font-size: 14px; font-weight: bold; border: 1px solid #000; padding: 1px 4px;">TOKEN: ${order.token_no || '001'}</span></td>
+                </tr>
+            </table>
+            <div class="line"></div>
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50%;">Item</th>
+                        <th class="right" style="width: 20%;">Qty</th>
+                        <th class="right" style="width: 30%;">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>`;
 
-                const totalQty = itemResults.reduce((sum, item) => sum + Number(item.qty), 0);
-                const printLanguage = company.sales_lang || 'English';
-                const displayWaiter = (printLanguage === 'Tamil' && order.tamil_waiter_name) ? order.tamil_waiter_name : order.waiter_name;
-
-                // 📄 வாடிக்கையாளர் பில்லுக்கான முழு விபரங்கள் அடங்கிய HTML (Amount, GST, Net Total உடன்)
-                let htmlContent = `
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <style>
-                        @import url('https://fonts.googleapis.com/css2?family=Hind+Madurai:wght@400;700&display=swap');
-                        body { width: 280px; margin: 0; padding: 5px; font-family: 'Hind Madurai', sans-serif; font-size: 13px; color: #000; }
-                        .center { text-align: center; }
-                        .bold { font-weight: bold; }
-                        .title { font-size: 18px; margin-bottom: 2px; text-transform: uppercase; }
-                        .subtitle { font-size: 12px; margin-bottom: 10px; }
-                        .line { border-top: 1px dashed #000; margin: 5px 0; }
-                        .info-table, .items-table { width: 100%; border-collapse: collapse; }
-                        .info-table td { padding: 2px 0; font-size: 12px; }
-                        .items-table th { border-bottom: 1px dashed #000; text-align: left; padding: 4px 0; font-size: 12px; }
-                        .items-table td { padding: 4px 0; vertical-align: top; }
-                        .right { text-align: right; }
-                        .total-section { font-size: 14px; margin-top: 5px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="center">
-                        <span class="bold title">${company.company_name}</span><br/>
-                        <span class="subtitle">${company.address1 || ''} ${company.address2 || ''}</span>
-                        ${company.gst_no ? `<br/><span class="subtitle">GSTIN: ${company.gst_no}</span>` : ''}
-                    </div>
-                    <div class="line"></div>
-                    <table class="info-table">
-                        <tr>
-                            <td><b>Order No:</b> ${order.order_pfx || ''}${order.order_no}</td>
-                            <td class="right"><b>Table:</b> ${order.table_no ? 'Table ' + order.table_no : 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td><b>Date:</b> ${order.order_date}</td>
-                            <td class="right"><b>Time:</b> ${order.order_time}</td>
-                        </tr>
-                        <tr>
-                            <td><b>Waiter:</b> ${displayWaiter || 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td class="right"><span style="font-size: 14px; font-weight: bold; border: 1px solid #000; padding: 1px 4px;">TOKEN: ${order.token_no || '001'}</span></td>
-                        </tr>
-                    </table>
-                    <div class="line"></div>
-                    <table class="items-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 50%;">Item</th>
-                                <th class="right" style="width: 20%;">Qty</th>
-                                <th class="right" style="width: 30%;">Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>`;
-
-                itemResults.forEach(item => {
-                    const displayProductName = (printLanguage === 'Tamil' && item.tamil_product_name) ? item.tamil_product_name : item.product_name;
-                    htmlContent += `
-                        <tr>
-                            <td>${displayProductName}</td>
-                            <td class="right">${item.qty}</td>
-                            <td class="right">₹${Number(item.value).toFixed(2)}</td>
-                        </tr>`;
-                });
-
-                htmlContent += `
-                        </tbody>
-                    </table>
-                    <div class="line"></div>
-                    <table class="info-table total-section">
-                        <tr class="bold">
-                            <td>Total Qty: ${totalQty}</td>
-                            <td class="right">Gross: ₹${Number(order.gross_value).toFixed(2)}</td>
-                        </tr>
-                        ${Number(order.gst_value) > 0 ? `
-                        <tr>
-                            <td></td>
-                            <td class="right">GST (${order.gst_percent}%): ₹${Number(order.gst_value).toFixed(2)}</td>
-                        </tr>` : ''}
-                        <tr class="bold" style="font-size: 15px;">
-                            <td></td>
-                            <td class="right">NET TOTAL: ₹${Number(order.net_value).toFixed(2)}</td>
-                        </tr>
-                    </table>
-                    <div class="line"></div>
-                    <div class="center bold" style="margin-top: 8px; font-size: 11px;">
-                        ${printLanguage === 'Tamil' ? '~ நன்றி! மீண்டும் வருக ~' : '~ Thank You! Visit Again ~'}
-                    </div>
-                </body>
-                </html>`;
-
-                const options = { width: '80mm', height: '200mm', border: '0' };
-                const tempPdfPath = path.join(__dirname, `temp_customer_print_${orderId}.pdf`);
-
-                pdf.create(htmlContent, options).toFile(tempPdfPath, (pdfErr) => {
-                    if (pdfErr) return;
-
-                    // ⭐ printer ஆப்ஷன் கொடுக்காததால், இது கம்ப்யூட்டரின் "Default Printer"-க்கு நேரடியாகப் போகும் நண்பா!
-                    const { print } = require('pdf-to-printer');
-                    print(tempPdfPath)
-                        .then(() => {
-                            console.log("Customer Bill printed successfully to Default Printer.");
-                            if(fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
-                        })
-                        .catch(pErr => {
-                            console.error("Default Printer Error:", pErr);
-                            if(fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
-                        });
-                });
-            });
+        itemResults.forEach(item => {
+            const displayProductName = (printLanguage === 'Tamil' && item.tamil_product_name) ? item.tamil_product_name : item.product_name;
+            htmlContent += `
+                <tr>
+                    <td>${displayProductName}</td>
+                    <td class="right">${item.qty}</td>
+                    <td class="right">₹${Number(item.value).toFixed(2)}</td>
+                </tr>`;
         });
-    });
+
+        htmlContent += `
+                </tbody>
+            </table>
+            <div class="line"></div>
+            <table class="info-table total-section">
+                <tr class="bold">
+                    <td>Total Qty: ${totalQty}</td>
+                    <td class="right">Gross: ₹${Number(order.gross_value).toFixed(2)}</td>
+                </tr>
+                ${Number(order.gst_value) > 0 ? `
+                <tr>
+                    <td></td>
+                    <td class="right">GST (${order.gst_percent}%): ₹${Number(order.gst_value).toFixed(2)}</td>
+                </tr>` : ''}
+                <tr class="bold" style="font-size: 15px;">
+                    <td></td>
+                    <td class="right">NET TOTAL: ₹${Number(order.net_value).toFixed(2)}</td>
+                </tr>
+            </table>
+            <div class="line"></div>
+            <div class="center bold" style="margin-top: 8px; font-size: 11px;">
+                ${printLanguage === 'Tamil' ? '~ நன்றி! மீண்டும் வருக ~' : '~ Thank You! Visit Again ~'}
+            </div>
+        </body>
+        </html>`;
+
+        const options = { width: '80mm', height: '200mm', border: '0' };
+        const tempPdfPath = path.join(__dirname, `temp_customer_print_${orderId}.pdf`);
+
+        pdf.create(htmlContent, options).toFile(tempPdfPath, (pdfErr) => {
+            if (pdfErr) return;
+            print(tempPdfPath)
+                .then(() => {
+                    console.log("Customer Bill printed successfully to Default Printer.");
+                    if(fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
+                })
+                .catch(pErr => {
+                    console.error("Default Printer Error:", pErr);
+                    if(fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
+                });
+        });
+    } catch (err) {
+        console.error("Customer Bill Error:", err);
+    }
 }
 
-// 🖨️ 2. KOT BILL - தொகை இல்லாமல் (No Amount) கிச்சன் பிரிண்டருக்கு மட்டும் போகும் ஃபங்க்ஷன்
-function triggerKitchenKOTPrint(orderId) {
-    db.query("SELECT * FROM companies LIMIT 1", (err, companyResults) => {
-        if (err || companyResults.length === 0) return;
+// 🖨️ 2. KOT BILL PRINT
+async function triggerKitchenKOTPrint(orderId) {
+    try {
+        const [companyResults] = await db.query("SELECT * FROM companies LIMIT 1");
+        if (companyResults.length === 0) return;
         const company = companyResults[0];
 
         const targetPrinter = company.kot_printer;
         const printLanguage = company.kot_lang || 'English';
 
-        if (!targetPrinter) {
-            console.log("No KOT printer configured. Skipping Kitchen Print.");
-            return;
-        }
+        if (!targetPrinter) return;
 
         const orderQuery = `
             SELECT o.*, w.waiter_name, w.tamil_waiter_name, o.table_id as table_no 
             FROM orders o
             LEFT JOIN waiters w ON o.waiter_id = w.id
             WHERE o.id = ?`;
+        const [orderResults] = await db.query(orderQuery, [orderId]);
+        if (orderResults.length === 0) return;
+        const order = orderResults[0];
 
-        db.query(orderQuery, [orderId], (err, orderResults) => {
-            if (err || orderResults.length === 0) return;
-            const order = orderResults[0];
+        const itemsQuery = `
+            SELECT oi.*, p.product_name, p.tamil_product_name 
+            FROM order_items oi
+            JOIN products p ON oi.product_id = p.id
+            WHERE oi.order_id = ?`;
+        const [itemResults] = await db.query(itemsQuery, [orderId]);
 
-            const itemsQuery = `
-                SELECT oi.*, p.product_name, p.tamil_product_name 
-                FROM order_items oi
-                JOIN products p ON oi.product_id = p.id
-                WHERE oi.order_id = ?`;
+        const totalQty = itemResults.reduce((sum, item) => sum + Number(item.qty), 0);
+        const displayWaiter = (printLanguage === 'Tamil' && order.tamil_waiter_name) ? order.tamil_waiter_name : order.waiter_name;
 
-            db.query(itemsQuery, [orderId], (err, itemResults) => {
-                if (err) return;
+        let htmlContent = `
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Hind+Madurai:wght@400;700&display=swap');
+                body { width: 280px; margin: 0; padding: 5px; font-family: 'Hind Madurai', sans-serif; font-size: 14px; color: #000; }
+                .center { text-align: center; }
+                .bold { font-weight: bold; }
+                .title { font-size: 18px; margin-bottom: 2px; text-transform: uppercase; }
+                .line { border-top: 1px dashed #000; margin: 5px 0; }
+                .info-table, .items-table { width: 100%; border-collapse: collapse; }
+                .info-table td { padding: 2px 0; font-size: 13px; }
+                .items-table th { border-bottom: 1px dashed #000; text-align: left; padding: 5px 0; font-size: 13px; }
+                .items-table td { padding: 6px 0; vertical-align: top; font-size: 14px; }
+                .right { text-align: right; }
+            </style>
+        </head>
+        <body>
+            <div class="center">
+                <span class="bold title">** KOT / KITCHEN **</span><br/>
+                <span style="font-size:16px; font-weight:bold; background:#000; color:#fff; padding:2px 5px;">Token No: ${order.token_no}</span> 
+            </div>
+            <div class="line"></div>
+            <table class="info-table">
+                <tr><td><b>Order No:</b> ${order.order_pfx || ''}${order.order_no}</td><td class="right"><b>Table:</b> ${order.table_no ? 'Table ' + order.table_no : 'N/A'}</td></tr>
+                <tr><td><b>Date:</b> ${order.order_date}</td><td class="right"><b>Time:</b> ${order.order_time}</td></tr>
+                <tr><td colspan="2"><b>Waiter:</b> ${displayWaiter || 'N/A'}</td></tr>
+            </table>
+            <div class="line"></div>
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">Qty</th>
+                        <th style="width: 75%;">Item Name</th>
+                    </tr>
+                </thead>
+                <tbody>`;
 
-                const totalQty = itemResults.reduce((sum, item) => sum + Number(item.qty), 0);
-                const displayWaiter = (printLanguage === 'Tamil' && order.tamil_waiter_name) ? order.tamil_waiter_name : order.waiter_name;
+        itemResults.forEach(item => {
+            const productName = item.product_name || item.tamil_product_name || `Item (${item.product_id})`;
+            const displayProductName = (printLanguage === 'Tamil' && item.tamil_product_name) ? item.tamil_product_name : productName;
 
-                // 📄 கிச்சனுக்கான எளிமையான HTML (விலை விபரங்கள் கிடையாது)
-                let htmlContent = `
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <style>
-                        @import url('https://fonts.googleapis.com/css2?family=Hind+Madurai:wght@400;700&display=swap');
-                        body { width: 280px; margin: 0; padding: 5px; font-family: 'Hind Madurai', sans-serif; font-size: 14px; color: #000; }
-                        .center { text-align: center; }
-                        .bold { font-weight: bold; }
-                        .title { font-size: 18px; margin-bottom: 2px; text-transform: uppercase; }
-                        .line { border-top: 1px dashed #000; margin: 5px 0; }
-                        .info-table, .items-table { width: 100%; border-collapse: collapse; }
-                        .info-table td { padding: 2px 0; font-size: 13px; }
-                        .items-table th { border-bottom: 1px dashed #000; text-align: left; padding: 5px 0; font-size: 13px; }
-                        .items-table td { padding: 6px 0; vertical-align: top; font-size: 14px; }
-                        .right { text-align: right; }
-                    </style>
-                </head>
-                <body>
-                    <div class="center">
-                        <span class="bold title">** KOT / KITCHEN **</span><br/>
-                        <span style="font-size:16px; font-weight:bold; background:#000; color:#fff; padding:2px 5px;">Token No: ${order.token_no}</span> 
-                    </div>
-                    <div class="line"></div>
-                    <table class="info-table">
-                        <tr><td><b>Order No:</b> ${order.order_pfx || ''}${order.order_no}</td><td class="right"><b>Table:</b> ${order.table_no ? 'Table ' + order.table_no : 'N/A'}</td></tr>
-                        <tr><td><b>Date:</b> ${order.order_date}</td><td class="right"><b>Time:</b> ${order.order_time}</td></tr>
-                        <tr><td colspan="2"><b>Waiter:</b> ${displayWaiter || 'N/A'}</td></tr>
-                    </table>
-                    <div class="line"></div>
-                    <table class="items-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 25%;">Qty</th>
-                                <th style="width: 75%;">Item Name</th>
-                            </tr>
-                        </thead>
-                        <tbody>`;
-
-                itemResults.forEach(item => {
-                    // 1. தயாரிப்பு பெயர் NULL-ஆக இருந்தால் 'Unknown Item' என வராமல் தடுக்கிறோம்
-                    const productName = item.product_name || item.tamil_product_name || `Item (${item.product_id})`;
-                    const displayProductName = (printLanguage === 'Tamil' && item.tamil_product_name) ? item.tamil_product_name : productName;
-
-                    htmlContent += `
-                        <tr>
-                            <td class="bold" style="font-size: 16px;">${item.qty}</td>
-                            <td>${displayProductName}</td>
-                        </tr>`;
-                });
-
-                htmlContent += `
-                        </tbody>
-                    </table>
-                    <div class="line"></div>
-                    <table class="info-table">
-                        <tr class="bold"><td>TOTAL QTY: ${totalQty}</td></tr>
-                    </table>
-                    <div class="line"></div>
-                </body>
-                </html>`;
-
-                const options = { width: '80mm', height: '200mm', border: '0' };
-                const tempPdfPath = path.join(__dirname, `temp_kot_print_${orderId}.pdf`);
-
-                pdf.create(htmlContent, options).toFile(tempPdfPath, (pdfErr) => {
-                    if (pdfErr) return;
-
-                    getPrinters().then(allPrinters => {
-                        const printerExists = allPrinters.some(p => p.name === targetPrinter);
-                        if (printerExists) {
-                            const { print } = require('pdf-to-printer');
-                            print(tempPdfPath, { printer: targetPrinter })
-                                .then(() => {
-                                    if(fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
-                                })
-                                .catch(() => {
-                                    if(fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
-                                });
-                        } else {
-                            if(fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
-                        }
-                    });
-                });
-            });
+            htmlContent += `
+                <tr>
+                    <td class="bold" style="font-size: 16px;">${item.qty}</td>
+                    <td>${displayProductName}</td>
+                </tr>`;
         });
-    });
+
+        htmlContent += `
+                </tbody>
+            </table>
+            <div class="line"></div>
+            <table class="info-table">
+                <tr class="bold"><td>TOTAL QTY: ${totalQty}</td></tr>
+            </table>
+            <div class="line"></div>
+        </body>
+        </html>`;
+
+        const options = { width: '80mm', height: '200mm', border: '0' };
+        const tempPdfPath = path.join(__dirname, `temp_kot_print_${orderId}.pdf`);
+
+        pdf.create(htmlContent, options).toFile(tempPdfPath, async (pdfErr) => {
+            if (pdfErr) return;
+
+            try {
+                const allPrinters = await getPrinters();
+                const printerExists = allPrinters.some(p => p.name === targetPrinter);
+                if (printerExists) {
+                    await print(tempPdfPath, { printer: targetPrinter });
+                }
+            } catch (err) {
+                console.error("KOT Print Error:", err);
+            } finally {
+                if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
+            }
+        });
+    } catch (err) {
+        console.error("KOT Setup Error:", err);
+    }
 }
-// பழைய ஏபிஐ-க்கு பதிலாக இதை மாற்றிப் போடுங்கள் நண்பா
-app.get('/api/product-groups', (req, res) => {
-    // products டேபிளில் இருக்கும் குழுக்களை மட்டும் யுனிக்-ஆக எடுக்கிறோம்
-    const query = `
-        SELECT product_group AS name 
-        FROM products 
-        WHERE product_group IS NOT NULL AND product_group != '' 
-        GROUP BY product_group 
-        ORDER BY product_group ASC
-    `;
-    db.query(query, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        
-        // ஃபிரண்ட்-எண்டிற்கு id மற்றும் name ஜோடியாக அனுப்ப வேண்டும் என்பதால் Map செய்கிறோம்
+
+app.get('/api/product-groups', async (req, res) => {
+    try {
+        const query = `
+            SELECT product_group AS name 
+            FROM products 
+            WHERE product_group IS NOT NULL AND product_group != '' 
+            GROUP BY product_group 
+            ORDER BY product_group ASC
+        `;
+        const [results] = await db.query(query);
         const formattedGroups = results.map((item, index) => ({
-            id: index + 1, // தற்காலிக ஐடி
+            id: index + 1,
             name: item.name
         }));
-        
         res.json(formattedGroups);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// server.js ஃபைலின் கீழே உள்ள இந்த ஏபிஐ-ஐ மட்டும் இப்படி மாற்றுங்கள் நண்பா
-app.get('/api/products', (req, res) => {
-    // group_id-க்கு பதிலாக product_group என்று மாற்றப்பட்டுள்ளது
-    db.query("SELECT id, product_name, product_group, ac_rate, non_ac_rate FROM products ORDER BY product_name ASC", (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/orders/pending-tokens', async (req, res) => {
+    try {
+        const query = `
+            SELECT o.id, o.token_no, o.net_value, o.table_id, t.table_no, w.waiter_name 
+            FROM orders o
+            LEFT JOIN restaurant_tables t ON o.table_id = t.id
+            LEFT JOIN waiters w ON o.waiter_id = w.id
+            WHERE o.id NOT IN (SELECT order_id FROM sales WHERE order_id IS NOT NULL)
+              AND (o.status IS NULL OR o.status != 'COMPLETED')
+            ORDER BY o.id DESC
+        `;
+        const [results] = await db.query(query);
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.get('/api/orders/pending-tokens', (req, res) => {
-    const query = `
-        SELECT o.id, o.token_no, o.net_value, o.table_id, t.table_no, w.waiter_name 
-        FROM orders o
-        LEFT JOIN restaurant_tables t ON o.table_id = t.id
-        LEFT JOIN waiters w ON o.waiter_id = w.id
-        WHERE o.id NOT IN (SELECT order_id FROM sales WHERE order_id IS NOT NULL)
-          AND (o.status IS NULL OR o.status != 'COMPLETED')
-        ORDER BY o.id DESC
-    `;
-    db.query(query, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(results);
-    });
-});
-
-// 1. ஒரு குறிப்பிட்ட ஆர்டரின் முழு விபரங்கள் மற்றும் அதன் ஐட்டங்களை எடிட் செய்ய எடுக்க
-app.get('/api/orders/:id', (req, res) => {
-    const orderId = req.params.id;
-    
-    // முதன்மை ஆர்டர் விபரம்
-    db.query("SELECT * FROM orders WHERE id = ?", [orderId], (err, orderResults) => {
-        if (err) return res.status(500).json({ error: err.message });
+// 1. குறிப்பிட்ட ஆர்டரின் முழு விபரங்கள்
+app.get('/api/orders/:id', async (req, res) => {
+    try {
+        const orderId = req.params.id;
+        const [orderResults] = await db.query("SELECT * FROM orders WHERE id = ?", [orderId]);
         if (orderResults.length === 0) return res.status(404).json({ message: "Order not found" });
 
-        // அந்த ஆர்டருக்குள் இருக்கும் பொருட்கள் (Items)
         const itemQuery = `
             SELECT oi.*, p.product_name 
             FROM order_items oi
             JOIN products p ON oi.product_id = p.id
             WHERE oi.order_id = ?`;
-            
-        db.query(itemQuery, [orderId], (err, itemResults) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ order: orderResults[0], items: itemResults });
-        });
-    });
+        const [itemResults] = await db.query(itemQuery, [orderId]);
+
+        res.json({ order: orderResults[0], items: itemResults });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
+// 2. எடிட் செய்த ஆர்டரை அப்டேட் செய்ய
+app.put('/api/orders/:id', async (req, res) => {
+    const connection = await db.getConnection();
+    try {
+        const orderId = req.params.id;
+        const { waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, items, is_print } = req.body;
 
+        await connection.beginTransaction();
 
-
-// 2. எடிட் செய்த ஆர்டரை டேட்டாபேஸில் அப்டேட் செய்ய (PUT Method)
-app.put('/api/orders/:id', (req, res) => {
-    const orderId = req.params.id;
-    const { waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, items } = req.body;
-
-    db.beginTransaction(err => {
-        if (err) return res.status(500).json({ error: err.message });
-
-        // முதன்மை ஆர்டரை அப்டேட் செய்கிறோம்
         const updateOrderQuery = `
             UPDATE orders 
             SET waiter_id=?, table_id=?, order_type=?, gross_value=?, gst_percent=?, gst_value=?, net_value=? 
             WHERE id=?`;
+        await connection.query(updateOrderQuery, [waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, orderId]);
 
-        db.query(updateOrderQuery, [waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, orderId], (err) => {
-            if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
+        await connection.query("DELETE FROM order_items WHERE order_id = ?", [orderId]);
 
-            // பழைய பொருட்களை முதலில் நீக்குகிறோம்
-            db.query("DELETE FROM order_items WHERE order_id = ?", [orderId], (err) => {
-                if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
+        const insertItemQuery = "INSERT INTO order_items (order_id, product_id, qty, rate, value) VALUES ?";
+        const itemValues = items.map(item => [orderId, item.product_id, item.qty, item.rate, item.value]);
+        await connection.query(insertItemQuery, [itemValues]);
 
-                // புதிய திருத்தப்பட்ட பொருட்களைச் சேர்க்கிறோம்
-                const insertItemQuery = "INSERT INTO order_items (order_id, product_id, qty, rate, value) VALUES ?";
-                const itemValues = items.map(item => [orderId, item.product_id, item.qty, item.rate, item.value]);
+        await connection.commit();
 
-                db.query(insertItemQuery, [itemValues], (err) => {
-                    if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
+        res.json({ message: "Order Processed Successfully!", orderId: orderId });
 
-                    // POST மற்றும் PUT ஏபிஐ-ல் உள்ள db.commit-க்குள் இதை மாற்றிப் போடுங்கள் நண்பா:
-                    db.commit(err => {
-                        if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
-                        
-                        const { is_print } = req.body;
-
-                        res.json({ 
-                            message: "Order Processed Successfully!", 
-                            orderId: orderId 
-                        });
-
-                        // ⚡ ஒரே நேரத்தில் இரண்டு பிரிண்டர்களுக்கும் பிரிண்ட் கமாண்ட் போகிறது!
-                        if (is_print === true || is_print === undefined) {
-                            setTimeout(() => {
-                                // 1. வாடிக்கையாளர் பில் தொகையுடன் (Default Printer-க்கு போகும்)
-                                triggerCustomerBillPrint(orderId);
-                                
-                                // 2. சமையலறை KOT தொகை இல்லாமல் (Company Setup Printer-க்கு போகும்)
-                                triggerKitchenKOTPrint(orderId);
-                            }, 500);
-                        }
-                    });
-                });
-            });
-        });
-    });
+        if (is_print === true || is_print === undefined) {
+            setTimeout(() => {
+                triggerCustomerBillPrint(orderId);
+                triggerKitchenKOTPrint(orderId);
+            }, 500);
+        }
+    } catch (err) {
+        await connection.rollback();
+        res.status(500).json({ error: err.message });
+    } finally {
+        connection.release();
+    }
 });
 
 // ==========================================
 // USER PASSWORD & PERMISSION SETUP APIS
 // ==========================================
 
-// 1. அனைத்து பயனர்களையும் கிரிட்டில் (Grid) காட்ட தேவையான விபரங்களை எடுத்தல்
-app.get('/api/setup/users', (req, res) => {
-    // பாஸ்வேர்டை பாதுகாப்பிற்காக விடுத்து, மற்ற விபரங்களை எடுக்கிறோம்
-    const query = "SELECT id, username, role, permitted_menus, linked_waiters FROM users ORDER BY username ASC";
-    db.query(query, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/setup/users', async (req, res) => {
+    try {
+        const query = "SELECT id, username, role, permitted_menus, linked_waiters FROM users ORDER BY username ASC";
+        const [results] = await db.query(query);
         
-        // JSON ஸ்ட்ரிங்காக இருக்கும் மெனு மற்றும் வெயிட்டர் விபரங்களை மீண்டும் அரே-வாக (Array) மாற்றி அனுப்புகிறோம்
         const formattedUsers = results.map(user => ({
             ...user,
-            permitted_menus: user.permitted_menus ? JSON.parse(user.permitted_menus) : [],
-            linked_waiters: user.linked_waiters ? JSON.parse(user.linked_waiters) : []
+            permitted_menus: user.permitted_menus ? (typeof user.permitted_menus === 'string' ? JSON.parse(user.permitted_menus) : user.permitted_menus) : [],
+            linked_waiters: user.linked_waiters ? (typeof user.linked_waiters === 'string' ? JSON.parse(user.linked_waiters) : user.linked_waiters) : []
         }));
         res.json(formattedUsers);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 2. புதிய யூசர் மற்றும் பெர்மிஷன்களைச் சேமிக்க (Create User with Permissions)
-app.post('/api/setup/users', (req, res) => {
-    const { username, password, role, permitted_menus, linked_waiters } = req.body;
+app.post('/api/setup/users', async (req, res) => {
+    try {
+        const { username, password, role, permitted_menus, linked_waiters } = req.body;
 
-    // ஏற்கனவே இந்த யூசர்நேம் இருக்கிறதா என்று செக் செய்கிறோம்
-    db.query("SELECT id FROM users WHERE username = ?", [username], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+        const [results] = await db.query("SELECT id FROM users WHERE username = ?", [username]);
         if (results.length > 0) {
             return res.status(400).json({ error: "Username already exists!" });
         }
 
         const query = "INSERT INTO users (username, password, role, permitted_menus, linked_waiters) VALUES (?, ?, ?, ?, ?)";
-        
-        // அரே டேட்டாக்களை JSON ஸ்ட்ரிங்காக மாற்றி டேட்டாபேஸில் சேமிக்கிறோம்
-        db.query(query, [
+        await db.query(query, [
             username, 
             password, 
             role, 
             JSON.stringify(permitted_menus || []), 
             JSON.stringify(linked_waiters || [])
-        ], (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: "User Configuration Saved Successfully!" });
-        });
-    });
-});
-
-// 3. யூசர் பெர்மிஷன்களை எடிட் செய்து புதுப்பிக்க (Update User Permissions)
-app.put('/api/setup/users/:id', (req, res) => {
-    const { id } = req.params;
-    const { username, password, role, permitted_menus, linked_waiters } = req.body;
-
-    // பாஸ்வேர்ட் மாற்றப்பட்டிருந்தால் அதையும் சேர்த்து அப்டேட் செய்ய லாஜிக்
-    let query, params;
-    if (password && password.trim() !== "") {
-        query = "UPDATE users SET username=?, password=?, role=?, permitted_menus=?, linked_waiters=? WHERE id=?";
-        params = [username, password, role, JSON.stringify(permitted_menus), JSON.stringify(linked_waiters), id];
-    } else {
-        query = "UPDATE users SET username=?, role=?, permitted_menus=?, linked_waiters=? WHERE id=?";
-        params = [username, role, JSON.stringify(permitted_menus), JSON.stringify(linked_waiters), id];
+        ]);
+        res.json({ message: "User Configuration Saved Successfully!" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-
-    db.query(query, params, (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "User Configuration Updated Successfully!" });
-    });
 });
 
-// 4. யூசரை நீக்க (Delete User)
-app.delete('/api/setup/users/:id', (req, res) => {
-    db.query("DELETE FROM users WHERE id = ?", [req.params.id], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.put('/api/setup/users/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { username, password, role, permitted_menus, linked_waiters } = req.body;
+
+        let query, params;
+        if (password && password.trim() !== "") {
+            query = "UPDATE users SET username=?, password=?, role=?, permitted_menus=?, linked_waiters=? WHERE id=?";
+            params = [username, password, role, JSON.stringify(permitted_menus), JSON.stringify(linked_waiters), id];
+        } else {
+            query = "UPDATE users SET username=?, role=?, permitted_menus=?, linked_waiters=? WHERE id=?";
+            params = [username, role, JSON.stringify(permitted_menus), JSON.stringify(linked_waiters), id];
+        }
+
+        await db.query(query, params);
+        res.json({ message: "User Configuration Updated Successfully!" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/setup/users/:id', async (req, res) => {
+    try {
+        await db.query("DELETE FROM users WHERE id = ?", [req.params.id]);
         res.json({ message: "User Deleted Successfully!" });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ==========================================
 // 💳 SALES MODULE APIS & AUTO BILL NUMBER
 // ==========================================
 
-// 1. நிதி ஆண்டைக் கணக்கிடும் Helper Function (Financial Year: Apr - Mar)
 function getCurrentFinancialYear() {
     const today = new Date();
-    const month = today.getMonth() + 1; // 1 - 12
+    const month = today.getMonth() + 1;
     const year = today.getFullYear();
     
     let startYear = year;
     let endYear = year + 1;
 
-    if (month < 4) { // Jan, Feb, Mar என்றால் முந்தைய நிதி ஆண்டு
+    if (month < 4) {
         startYear = year - 1;
         endYear = year;
     }
 
-    const fyStart = startYear.toString().slice(-2);
-    const fyEnd = endYear.toString().slice(-2);
-
-    return `${fyStart}-${fyEnd}`; // எ.கா: "26-27"
+    return `${startYear.toString().slice(-2)}-${endYear.toString().slice(-2)}`;
 }
 
-// 2. அடுத்த Sales Bill No பெற (எ.கா: S 26-27/1)
-app.get('/api/sales/next-bill-no', (req, res) => {
-    const fy = getCurrentFinancialYear();
-    const prefix = `S ${fy}/`;
+app.get('/api/sales/next-bill-no', async (req, res) => {
+    try {
+        const fy = getCurrentFinancialYear();
+        const prefix = `S ${fy}/`;
 
-    const query = "SELECT bill_no FROM sales WHERE bill_no LIKE ? ORDER BY id DESC LIMIT 1";
-    db.query(query, [`${prefix}%`], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+        const query = "SELECT bill_no FROM sales WHERE bill_no LIKE ? ORDER BY id DESC LIMIT 1";
+        const [results] = await db.query(query, [`${prefix}%`]);
 
         let nextNo = 1;
         if (results.length > 0 && results[0].bill_no) {
-            const lastBill = results[0].bill_no;
-            const parts = lastBill.split('/');
+            const parts = results[0].bill_no.split('/');
             if (parts.length > 1) {
                 nextNo = parseInt(parts[1]) + 1;
             }
         }
         res.json({ bill_no: `${prefix}${nextNo}` });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// 3. Sales Bill Save, Complete & Print Logic
-app.post('/api/sales', (req, res) => {
-    const { order_id, token_no, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned, items } = req.body;
-    const isDirectBilling = !token_no; 
+app.post('/api/sales', async (req, res) => {
+    try {
+        const { order_id, token_no, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned, items } = req.body;
+        const isDirectBilling = !token_no; 
 
-    const fy = getCurrentFinancialYear();
-    const prefix = `S ${fy}/`;
+        const fy = getCurrentFinancialYear();
+        const prefix = `S ${fy}/`;
 
-    db.query("SELECT bill_no FROM sales WHERE bill_no LIKE ? ORDER BY id DESC LIMIT 1", [`${prefix}%`], (bErr, bResults) => {
+        const [bResults] = await db.query("SELECT bill_no FROM sales WHERE bill_no LIKE ? ORDER BY id DESC LIMIT 1", [`${prefix}%`]);
         let nextNo = 1;
-        if (!bErr && bResults.length > 0 && bResults[0].bill_no) {
+        if (bResults.length > 0 && bResults[0].bill_no) {
             const parts = bResults[0].bill_no.split('/');
             if (parts.length > 1) nextNo = parseInt(parts[1]) + 1;
         }
         const finalBillNo = `${prefix}${nextNo}`;
 
-        const processSave = (fToken, fOrderId) => {
-            const salesQuery = `
-                INSERT INTO sales (bill_no, order_id, token_no, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned, sales_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-            `;
-
-            db.query(salesQuery, [finalBillNo, fOrderId, fToken, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned], (sErr, sResult) => {
-                if (sErr) return res.status(500).json({ error: sErr.message });
-
-                const salesId = sResult.insertId;
-
-                if (fOrderId) {
-                    db.query("UPDATE orders SET status = 'COMPLETED' WHERE id = ?", [fOrderId]);
-                }
-
-                res.json({ success: true, sales_id: salesId, bill_no: finalBillNo });
-
-                // 🖨️ PRINT LOGIC
-                setTimeout(() => {
-                    if (fOrderId) {
-                        if (isDirectBilling) {
-                            // Direct Counter Billing எனில் வாடிக்கையாளர் பில் + கிச்சன் KOT இரண்டும் பிரிண்ட் ஆகும்
-                            triggerCustomerBillPrint(fOrderId);
-                            triggerKitchenKOTPrint(fOrderId);
-                        } else {
-                            // Token Billing எனில் வாடிக்கையாளர் பில் மட்டும் பிரிண்ட் ஆகும்
-                            triggerCustomerBillPrint(fOrderId);
-                        }
-                    }
-                }, 500);
-            });
-        };
-
         if (isDirectBilling) {
             const todayDate = new Date().toISOString().slice(0, 10);
             const currentTime = new Date().toTimeString().slice(0, 8);
 
-            db.query("SELECT token_no FROM orders WHERE order_date = ? ORDER BY id DESC LIMIT 1", [todayDate], (tErr, tResults) => {
-                let nextToken = 1;
-                if (!tErr && tResults.length > 0 && tResults[0].token_no) {
-                    nextToken = parseInt(tResults[0].token_no) + 1;
-                }
-                const newTokNo = String(nextToken).padStart(3, '0');
+            const [tResults] = await db.query("SELECT token_no FROM orders WHERE order_date = ? ORDER BY id DESC LIMIT 1", [todayDate]);
+            let nextToken = 1;
+            if (tResults.length > 0 && tResults[0].token_no) {
+                nextToken = parseInt(tResults[0].token_no) + 1;
+            }
+            const newTokNo = String(nextToken).padStart(3, '0');
 
-                db.query("SELECT order_no FROM orders ORDER BY id DESC LIMIT 1", (oErr, oResults) => {
-                    let nextOrderNo = "00001";
-                    if (!oErr && oResults.length > 0) {
-                        nextOrderNo = String(parseInt(oResults[0].order_no) + 1).padStart(5, '0');
-                    }
+            const [oResults] = await db.query("SELECT order_no FROM orders ORDER BY id DESC LIMIT 1");
+            let nextOrderNo = "00001";
+            if (oResults.length > 0 && oResults[0].order_no) {
+                nextOrderNo = String(parseInt(oResults[0].order_no) + 1).padStart(5, '0');
+            }
 
-                    // NULL values-ஐ தெளிவாக அனுப்ப table_id மற்றும் waiter_id handling சேர்க்கப்பட்டுள்ளது
-                    const finalTableId = table_id || null;
-                    const insOrderQuery = `
-                        INSERT INTO orders 
-                        (order_pfx, order_no, token_no, order_date, order_time, waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, status) 
-                        VALUES ('ORD', ?, ?, ?, ?, NULL, ?, 'NON_AC', ?, 0, 0, ?, 'COMPLETED')
-                    `;
+            const finalTableId = table_id || null;
+            const insOrderQuery = `
+                INSERT INTO orders 
+                (order_pfx, order_no, token_no, order_date, order_time, waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, status) 
+                VALUES ('ORD', ?, ?, ?, ?, NULL, ?, 'NON_AC', ?, 0, 0, ?, 'COMPLETED')
+            `;
 
-                    db.query(insOrderQuery, [nextOrderNo, newTokNo, todayDate, currentTime, finalTableId, gross_value, net_payable], (ioErr, ioResult) => {
-                        if (ioErr) {
-                            console.error("❌ Direct Billing Order Error:", ioErr.message); // Console-ல் துல்லியமான எரர் பார்க்க
-                            return res.status(500).json({ error: ioErr.message });
-                        }
-                        
-                        const newOrderId = ioResult.insertId;
-                        const itemValues = items.map(i => [newOrderId, i.product_id, i.qty, i.rate, i.value]);
-                        
-                        db.query("INSERT INTO order_items (order_id, product_id, qty, rate, value) VALUES ?", [itemValues], (itemErr) => {
-                            if (itemErr) {
-                                console.error("❌ Direct Billing Order Items Error:", itemErr.message);
-                                return res.status(500).json({ error: itemErr.message });
-                            }
-                            processSave(newTokNo, newOrderId);
-                        });
-                    });
-                });
-            });
+            const [ioResult] = await db.query(insOrderQuery, [nextOrderNo, newTokNo, todayDate, currentTime, finalTableId, gross_value, net_payable]);
+            const newOrderId = ioResult.insertId;
+
+            const itemValues = items.map(i => [newOrderId, i.product_id, i.qty, i.rate, i.value]);
+            await db.query("INSERT INTO order_items (order_id, product_id, qty, rate, value) VALUES ?", [itemValues]);
+
+            // Save Sales
+            const salesQuery = `
+                INSERT INTO sales (bill_no, order_id, token_no, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned, sales_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            `;
+            const [sResult] = await db.query(salesQuery, [finalBillNo, newOrderId, newTokNo, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned]);
+
+            res.json({ success: true, sales_id: sResult.insertId, bill_no: finalBillNo });
+
+            setTimeout(() => {
+                triggerCustomerBillPrint(newOrderId);
+                triggerKitchenKOTPrint(newOrderId);
+            }, 500);
+
         } else {
-            processSave(token_no, order_id);
+            const salesQuery = `
+                INSERT INTO sales (bill_no, order_id, token_no, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned, sales_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            `;
+            const [sResult] = await db.query(salesQuery, [finalBillNo, order_id, token_no, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned]);
+
+            if (order_id) {
+                await db.query("UPDATE orders SET status = 'COMPLETED' WHERE id = ?", [order_id]);
+            }
+
+            res.json({ success: true, sales_id: sResult.insertId, bill_no: finalBillNo });
+
+            setTimeout(() => {
+                if (order_id) triggerCustomerBillPrint(order_id);
+            }, 500);
         }
-    });
-});
-
-// 4. Sales List எடுக்க (With Date Range Filter)
-app.get('/api/sales', (req, res) => {
-    const { from_date, to_date } = req.query;
-    let query = `
-        SELECT s.*, IFNULL(t.table_no, 'Counter') as table_no 
-        FROM sales s 
-        LEFT JOIN restaurant_tables t ON s.table_id = t.id
-    `;
-    const params = [];
-
-    if (from_date && to_date) {
-        query += ` WHERE DATE(s.sales_date) BETWEEN ? AND ? `;
-        params.push(from_date, to_date);
+    } catch (err) {
+        console.error("Sales Save Error:", err);
+        res.status(500).json({ error: err.message });
     }
-    query += ` ORDER BY s.id DESC`;
-
-    db.query(query, params, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(results);
-    });
 });
 
-// 🗑️ Sales Bill Delete - Smart Logic (Direct Sales & Token Sales)
-app.delete('/api/sales/:id', async (req, res) => {
-    const salesId = req.params.id;
-
+app.get('/api/sales', async (req, res) => {
     try {
-        // 1. Sales விபரங்களை எடுக்கிறோம்
-        const [salesRows] = await db.promise().query(
+        const { from_date, to_date } = req.query;
+        let query = `
+            SELECT s.*, IFNULL(t.table_no, 'Counter') as table_no 
+            FROM sales s 
+            LEFT JOIN restaurant_tables t ON s.table_id = t.id
+        `;
+        const params = [];
+
+        if (from_date && to_date) {
+            query += ` WHERE DATE(s.sales_date) BETWEEN ? AND ? `;
+            params.push(from_date, to_date);
+        }
+        query += ` ORDER BY s.id DESC`;
+
+        const [results] = await db.query(query, params);
+        res.json(results);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/sales/:id', async (req, res) => {
+    const connection = await db.getConnection();
+    try {
+        const salesId = req.params.id;
+
+        const [salesRows] = await connection.query(
             "SELECT order_id, token_no FROM sales WHERE id = ?", 
             [salesId]
         );
 
         if (salesRows.length === 0) {
+            connection.release();
             return res.status(404).json({ error: "Sales bill not found!" });
         }
 
         const { order_id } = salesRows[0];
 
-        await db.promise().beginTransaction();
+        await connection.beginTransaction();
 
-        // 2. Sales டேபிளிலிருந்து பில்லை நீக்குகிறோம்
-        await db.promise().query("DELETE FROM sales WHERE id = ?", [salesId]);
+        await connection.query("DELETE FROM sales WHERE id = ?", [salesId]);
 
         if (order_id) {
-            // 3. Check order attributes to determine direct sales vs token sales
-            const [orderRows] = await db.promise().query(
+            const [orderRows] = await connection.query(
                 "SELECT order_type, waiter_id FROM orders WHERE id = ?", 
                 [order_id]
             );
 
-            // If no waiter assigned or order_type indicates direct counter sale
             if (orderRows.length > 0 && (!orderRows[0].waiter_id || orderRows[0].order_type === 'DIRECT')) {
-                // Direct Sales: Delete associated Order & Items completely
-                await db.promise().query("DELETE FROM order_items WHERE order_id = ?", [order_id]);
-                await db.promise().query("DELETE FROM orders WHERE id = ?", [order_id]);
+                await connection.query("DELETE FROM order_items WHERE order_id = ?", [order_id]);
+                await connection.query("DELETE FROM orders WHERE id = ?", [order_id]);
             } else {
-                // Token / Table Sales: Reset order status back to PENDING
-                await db.promise().query(
+                await connection.query(
                     "UPDATE orders SET status = 'PENDING' WHERE id = ?", 
                     [order_id]
                 );
             }
         }
 
-        await db.promise().commit();
+        await connection.commit();
         res.json({ message: "Sales bill deleted and order status updated successfully!" });
 
     } catch (err) {
-        await db.promise().rollback();
+        await connection.rollback();
         console.error("Error deleting sales:", err);
         res.status(500).json({ error: err.message });
+    } finally {
+        connection.release();
     }
 });
 
-app.get('/api/sales/reprint/:id', (req, res) => {
-    const salesId = req.params.id;
-    db.query("SELECT order_id FROM sales WHERE id = ?", [salesId], (err, results) => {
-        if (err || results.length === 0) return res.status(404).json({ error: "Sales bill not found" });
+app.get('/api/sales/reprint/:id', async (req, res) => {
+    try {
+        const salesId = req.params.id;
+        const [results] = await db.query("SELECT order_id FROM sales WHERE id = ?", [salesId]);
+        
+        if (results.length === 0) return res.status(404).json({ error: "Sales bill not found" });
         
         const orderId = results[0].order_id;
         if (orderId) {
-            // வாடிக்கையாளர் பில்லை பிரிண்ட் செய்ய தூண்டுகிறது
             triggerCustomerBillPrint(orderId);
             res.json({ message: "Re-print triggered successfully!" });
         } else {
             res.status(400).json({ error: "No associated order found for re-print" });
         }
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
-
-
-
 
 // சர்வர் போர்ட் ரன் செய்தல்
 const PORT = 5000;

@@ -4,7 +4,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-//const { getPrinters, print } = require('pdf-to-printer');
+const { getPrinters, print } = require('pdf-to-printer');
 const pdf = require('html-pdf');
 require('dotenv').config();
 
@@ -321,31 +321,17 @@ app.get('/api/products/groups-ta', async (req, res) => {
 });
 
 // 1. சிஸ்டமில் உள்ள பிரிண்டர்கள்
-// app.get('/api/system-printers', async (req, res) => {
-//     try {
-//         const printers = await getPrinters();
-//         const printerNames = printers.map(p => p.name);
-//         res.json(printerNames);
-//     } catch (err) {
-//         console.error("Error fetching system printers:", err);
-//         res.json([]);
-//     }
-// });
-
-const ptp = require('pdf-to-printer');
-
 app.get('/api/system-printers', async (req, res) => {
-  try {
-    const printers = await ptp.getPrinters();
-    res.json(printers);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+    try {
+        const printers = await getPrinters();
+        const printerNames = printers.map(p => p.name);
+        res.json(printerNames);
+    } catch (err) {
+        console.error("Error fetching system printers:", err);
+        res.json([]);
+    }
 });
 
-app.listen(5000, () => {
-  console.log('Local Server running on http://localhost:5000');
-});
 
 // 2. கம்பெனியைச் சேமிக்க அல்லது புதுப்பிக்க
 app.post('/api/companies/save-single', upload.single('image'), async (req, res) => {

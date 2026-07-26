@@ -1252,11 +1252,7 @@ app.get('/api/sales/reprint/:id', async (req, res) => {
     }
 });
 
-// ==========================================
-// 📊 DASHBOARD & FINANCIAL YEAR REPORT APIS
-// ==========================================
-
-// 1. Available Financial Years List API
+// 1. Financial Years List API Update
 app.get('/api/dashboard/financial-years', async (req, res) => {
     try {
         const query = `
@@ -1266,14 +1262,16 @@ app.get('/api/dashboard/financial-years', async (req, res) => {
                     ELSE CONCAT(YEAR(sales_date) - 1, '-', YEAR(sales_date))
                 END AS fy
             FROM sales 
+            WHERE sales_date IS NOT NULL
             ORDER BY fy DESC
         `;
         const [results] = await db.query(query);
-        let years = results.map(r => r.fy);
+        let years = results.map(r => r.fy).filter(Boolean);
         
         // Default current financial year
-        const currentFY = getCurrentFinancialYear();
-        const formattedCurrentFY = `20${currentFY.split('-')[0]}-20${currentFY.split('-')[1]}`;
+        const currentFY = getCurrentFinancialYear(); // Returns '26-27'
+        const parts = currentFY.split('-');
+        const formattedCurrentFY = `20${parts[0]}-20${parts[1]}`; // '2026-2027'
         
         if (!years.includes(formattedCurrentFY)) {
             years.unshift(formattedCurrentFY);
@@ -1285,21 +1283,22 @@ app.get('/api/dashboard/financial-years', async (req, res) => {
     }
 });
 
-// 2. Real-time Dashboard Stats & April-March Sales Report API
+// 2. Real-time Dashboard Stats API Update
 app.get('/api/dashboard/stats', async (req, res) => {
     try {
-        let { fy } = req.query; // Format: "2025-2026"
+        let { fy } = req.query; // Format: "2026-2027"
         
-        if (!fy) {
+        if (!fy || fy === 'undefined' || fy === 'null') {
             const currentFY = getCurrentFinancialYear();
-            fy = `20${currentFY.split('-')[0]}-20${currentFY.split('-')[1]}`;
+            const parts = currentFY.split('-');
+            fy = `20${parts[0]}-20${parts[1]}`;
         }
 
         const [startYearStr, endYearStr] = fy.split('-');
         const startDate = `${startYearStr}-04-01 00:00:00`;
         const endDate = `${endYearStr}-03-31 23:59:59`;
 
-        // Today Sales Count & Total Amount
+        // Today Sales
         const todayDate = new Date().toISOString().slice(0, 10);
         const [todayStats] = await db.query(
             `SELECT COUNT(id) AS todayBillCount, IFNULL(SUM(net_payable), 0) AS todayTotalAmount 
@@ -1307,7 +1306,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
             [todayDate]
         );
 
-        // Monthwise Sales Data (April to March)
+        // Monthwise Sales Data
         const [monthStats] = await db.query(
             `SELECT 
                 MONTH(sales_date) as month_num,
@@ -1319,7 +1318,6 @@ app.get('/api/dashboard/stats', async (req, res) => {
             [startDate, endDate]
         );
 
-        // April to March Order Structure
         const monthsTemplate = [
             { month: 'April', month_num: 4, year: parseInt(startYearStr) },
             { month: 'May', month_num: 5, year: parseInt(startYearStr) },
@@ -1335,9 +1333,8 @@ app.get('/api/dashboard/stats', async (req, res) => {
             { month: 'March', month_num: 3, year: parseInt(endYearStr) }
         ];
 
-        // Format and Merge Data
         const monthwiseSales = monthsTemplate.map(m => {
-            const found = monthStats.find(s => s.month_num === m.month_num && s.year_num === m.year);
+            const found = monthStats.find(s => Number(s.month_num) === m.month_num && Number(s.year_num) === m.year);
             return {
                 month: `${m.month} ${m.year}`,
                 amount: `₹${(found ? Number(found.amount) : 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -1345,8 +1342,8 @@ app.get('/api/dashboard/stats', async (req, res) => {
         });
 
         res.json({
-            todayBillCount: todayStats[0].todayBillCount || 0,
-            todayTotalAmount: `₹${Number(todayStats[0].todayTotalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            todayBillCount: todayStats[0]?.todayBillCount || 0,
+            todayTotalAmount: `₹${Number(todayStats[0]?.todayTotalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
             monthwiseSales
         });
 

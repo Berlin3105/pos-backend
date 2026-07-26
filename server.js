@@ -101,11 +101,11 @@ app.use('/uploads', express.static(uploadDir));
 // });
 
 const db = mysql.createPool({
-    host: process.env.DB_HOST || 'mysql-335d3858-pos-project.f.aivencloud.com',
-    user: process.env.DB_USER || 'avnadmin',
-    password: process.env.DB_PASSWORD,
+    host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
+    user: process.env.DB_USER || 'HojFcYtE4maWpx7.root',
+    password: process.env.DB_PASSWORD || 'ACJUAvNSsHCThCM0',
     database: process.env.DB_NAME || 'jb_pos_db',
-    port: process.env.DB_PORT || 26228,
+    port: process.env.DB_PORT || 4000,
     ssl: { rejectUnauthorized: false },
     waitForConnections: true,
     connectionLimit: 10,
@@ -1247,6 +1247,109 @@ app.get('/api/sales/reprint/:id', async (req, res) => {
         } else {
             res.status(400).json({ error: "No associated order found for re-print" });
         }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// 📊 DASHBOARD & FINANCIAL YEAR REPORT APIS
+// ==========================================
+
+// 1. Available Financial Years List API
+app.get('/api/dashboard/financial-years', async (req, res) => {
+    try {
+        const query = `
+            SELECT DISTINCT 
+                CASE 
+                    WHEN MONTH(sales_date) >= 4 THEN CONCAT(YEAR(sales_date), '-', YEAR(sales_date) + 1)
+                    ELSE CONCAT(YEAR(sales_date) - 1, '-', YEAR(sales_date))
+                END AS fy
+            FROM sales 
+            ORDER BY fy DESC
+        `;
+        const [results] = await db.query(query);
+        let years = results.map(r => r.fy);
+        
+        // Default current financial year
+        const currentFY = getCurrentFinancialYear();
+        const formattedCurrentFY = `20${currentFY.split('-')[0]}-20${currentFY.split('-')[1]}`;
+        
+        if (!years.includes(formattedCurrentFY)) {
+            years.unshift(formattedCurrentFY);
+        }
+        
+        res.json(years);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2. Real-time Dashboard Stats & April-March Sales Report API
+app.get('/api/dashboard/stats', async (req, res) => {
+    try {
+        let { fy } = req.query; // Format: "2025-2026"
+        
+        if (!fy) {
+            const currentFY = getCurrentFinancialYear();
+            fy = `20${currentFY.split('-')[0]}-20${currentFY.split('-')[1]}`;
+        }
+
+        const [startYearStr, endYearStr] = fy.split('-');
+        const startDate = `${startYearStr}-04-01 00:00:00`;
+        const endDate = `${endYearStr}-03-31 23:59:59`;
+
+        // Today Sales Count & Total Amount
+        const todayDate = new Date().toISOString().slice(0, 10);
+        const [todayStats] = await db.query(
+            `SELECT COUNT(id) AS todayBillCount, IFNULL(SUM(net_payable), 0) AS todayTotalAmount 
+             FROM sales WHERE DATE(sales_date) = ?`, 
+            [todayDate]
+        );
+
+        // Monthwise Sales Data (April to March)
+        const [monthStats] = await db.query(
+            `SELECT 
+                MONTH(sales_date) as month_num,
+                YEAR(sales_date) as year_num,
+                IFNULL(SUM(net_payable), 0) as amount 
+             FROM sales 
+             WHERE sales_date BETWEEN ? AND ?
+             GROUP BY YEAR(sales_date), MONTH(sales_date)`,
+            [startDate, endDate]
+        );
+
+        // April to March Order Structure
+        const monthsTemplate = [
+            { month: 'April', month_num: 4, year: parseInt(startYearStr) },
+            { month: 'May', month_num: 5, year: parseInt(startYearStr) },
+            { month: 'June', month_num: 6, year: parseInt(startYearStr) },
+            { month: 'July', month_num: 7, year: parseInt(startYearStr) },
+            { month: 'August', month_num: 8, year: parseInt(startYearStr) },
+            { month: 'September', month_num: 9, year: parseInt(startYearStr) },
+            { month: 'October', month_num: 10, year: parseInt(startYearStr) },
+            { month: 'November', month_num: 11, year: parseInt(startYearStr) },
+            { month: 'December', month_num: 12, year: parseInt(startYearStr) },
+            { month: 'January', month_num: 1, year: parseInt(endYearStr) },
+            { month: 'February', month_num: 2, year: parseInt(endYearStr) },
+            { month: 'March', month_num: 3, year: parseInt(endYearStr) }
+        ];
+
+        // Format and Merge Data
+        const monthwiseSales = monthsTemplate.map(m => {
+            const found = monthStats.find(s => s.month_num === m.month_num && s.year_num === m.year);
+            return {
+                month: `${m.month} ${m.year}`,
+                amount: `₹${(found ? Number(found.amount) : 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            };
+        });
+
+        res.json({
+            todayBillCount: todayStats[0].todayBillCount || 0,
+            todayTotalAmount: `₹${Number(todayStats[0].todayTotalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            monthwiseSales
+        });
+
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

@@ -563,12 +563,12 @@ app.post('/api/orders', async (req, res) => {
             orderId: orderId 
         });
 
-        // if (is_print === true || is_print === undefined) {
-        //     setTimeout(() => {
-        //         triggerCustomerBillPrint(orderId);
-        //         triggerKitchenKOTPrint(orderId);
-        //     }, 500);
-        // }
+        if (is_print === true || is_print === undefined) {
+            setTimeout(() => {
+                triggerCustomerBillPrint(orderId);
+                triggerKitchenKOTPrint(orderId);
+            }, 500);
+        }
     } catch (err) {
         await connection.rollback();
         res.status(500).json({ error: err.message });
@@ -1132,10 +1132,10 @@ app.post('/api/sales', async (req, res) => {
 
             res.json({ success: true, sales_id: sResult.insertId, bill_no: finalBillNo });
 
-            // setTimeout(() => {
-            //     triggerCustomerBillPrint(newOrderId);
-            //     triggerKitchenKOTPrint(newOrderId);
-            // }, 500);
+            setTimeout(() => {
+                triggerCustomerBillPrint(newOrderId);
+                triggerKitchenKOTPrint(newOrderId);
+            }, 500);
 
         } else {
             const salesQuery = `

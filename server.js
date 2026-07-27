@@ -947,7 +947,14 @@ app.put('/api/orders/:id', async (req, res) => {
 
         await connection.commit();
 
-        res.json({ message: "Order Processed Successfully!", orderId: orderId });
+       // res.json({ message: "Order Processed Successfully!", orderId: orderId });
+        const [ordRow] = await connection.query("SELECT token_no FROM orders WHERE id = ?", [orderId]);
+        const existingToken = ordRow.length > 0 ? ordRow[0].token_no : '001';
+        res.json({ 
+            message: "Order Processed Successfully!", 
+            orderId: orderId,
+            token_no: finalTokenNo 
+        });
 
         if (is_print === true || is_print === undefined) {
             setTimeout(() => {

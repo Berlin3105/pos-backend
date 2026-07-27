@@ -558,9 +558,11 @@ app.post('/api/orders', async (req, res) => {
         await connection.query(itemQuery, [itemValues]);
         await connection.commit();
 
+        // ✅ token_no-வை Response-ல் சேர்க்க வேண்டும்
         res.json({ 
             message: "Order Processed Successfully!", 
-            orderId: orderId 
+            orderId: orderId,
+            token_no: finalTokenNo 
         });
 
         if (is_print === true || is_print === undefined) {
@@ -924,7 +926,6 @@ app.get('/api/orders/:id', async (req, res) => {
     }
 });
 
-// 2. எடிட் செய்த ஆர்டரை அப்டேட் செய்ய
 app.put('/api/orders/:id', async (req, res) => {
     const connection = await db.getConnection();
     try {
@@ -947,13 +948,14 @@ app.put('/api/orders/:id', async (req, res) => {
 
         await connection.commit();
 
-       // res.json({ message: "Order Processed Successfully!", orderId: orderId });
         const [ordRow] = await connection.query("SELECT token_no FROM orders WHERE id = ?", [orderId]);
         const existingToken = ordRow.length > 0 ? ordRow[0].token_no : '001';
+
+        // ✅ finalTokenNo-வுக்கு பதிலாக existingToken பயன்படுத்தவும்
         res.json({ 
             message: "Order Processed Successfully!", 
             orderId: orderId,
-            token_no: finalTokenNo 
+            token_no: existingToken 
         });
 
         if (is_print === true || is_print === undefined) {
@@ -969,7 +971,6 @@ app.put('/api/orders/:id', async (req, res) => {
         connection.release();
     }
 });
-
 // ==========================================
 // USER PASSWORD & PERMISSION SETUP APIS
 // ==========================================

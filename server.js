@@ -733,7 +733,12 @@ async function triggerCustomerBillPrint(orderId) {
         </body>
         </html>`;
 
-        const options = { width: '80mm', height: '200mm', border: '0' };
+        //const options = { width: '80mm', height: '200mm', border: '0' };
+        const options = { 
+            width: '80mm', 
+            border: '0',
+            type: 'pdf'
+            };
         const tempPdfPath = path.join(__dirname, `temp_customer_print_${orderId}.pdf`);
 
         pdf.create(htmlContent, options).toFile(tempPdfPath, (pdfErr) => {
@@ -845,7 +850,12 @@ async function triggerKitchenKOTPrint(orderId) {
         </body>
         </html>`;
 
-        const options = { width: '80mm', height: '200mm', border: '0' };
+        //const options = { width: '80mm', height: '200mm', border: '0' };
+        const options = { 
+        width: '80mm', 
+        border: '0',
+        type: 'pdf'
+        };
         const tempPdfPath = path.join(__dirname, `temp_kot_print_${orderId}.pdf`);
 
         pdf.create(htmlContent, options).toFile(tempPdfPath, async (pdfErr) => {

@@ -1,52 +1,56 @@
-const express = require('express');
-const mysql = require('mysql2/promise');
-const cors = require('cors');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const { getPrinters, print } = require('pdf-to-printer');
-const pdf = require('html-pdf');
-require('dotenv').config();
+// const express = require('express');
+// const mysql = require('mysql2/promise');
+// const cors = require('cors');
+// const multer = require('multer');
+// const path = require('path');
+// const fs = require('fs');
+// const { getPrinters, print } = require('pdf-to-printer');
+// const pdf = require('html-pdf');
+// require('dotenv').config();
 
-const app = express();
+// const app = express();
 
-// Middleware Configuration
-app.use(cors({
-    origin: '*', // Allow requests from Vercel frontend
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// // Middleware Configuration
+// app.use(cors({
+//     origin: '*', // Allow requests from Vercel frontend
+//     methods: ['GET', 'POST', 'PUT', 'DELETE'],
+//     allowedHeaders: ['Content-Type', 'Authorization']
+// }));
 
-app.use(express.json()); // JSON டேட்டாவை படிக்க
+// app.use(express.json()); // JSON டேட்டாவை படிக்க
 
-// இமேஜ் சேமிக்க 'uploads' ஃபோல்டரை புரோகிராம் லொகேஷனில் உருவாக்குகிறோம்
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
-}
+// // இமேஜ் சேமிக்க 'uploads' ஃபோல்டரை புரோகிராம் லொகேஷனில் உருவாக்குகிறோம்
+// const uploadDir = path.join(__dirname, 'uploads');
+// if (!fs.existsSync(uploadDir)) {
+//     fs.mkdirSync(uploadDir);
+// }
 
-// Multer Storage Configuration
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        // ஒரே பெயரில் ஃபைல் ஓவர்ரைட் ஆகாமல் இருக்க டைம்ஸ்டாம்ப் சேர்க்கிறோம்
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
-});
-const upload = multer({ storage: storage });
+// // Multer Storage Configuration
+// const storage = multer.diskStorage({
+//     destination: (req, file, cb) => {
+//         cb(null, uploadDir);
+//     },
+//     filename: (req, file, cb) => {
+//         // ஒரே பெயரில் ஃபைல் ஓவர்ரைட் ஆகாமல் இருக்க டைம்ஸ்டாம்ப் சேர்க்கிறோம்
+//         cb(null, Date.now() + path.extname(file.originalname));
+//     }
+// });
+// const upload = multer({ storage: storage });
 
-// Static Folder ஆக மாற்றுவதால் ஃபிரண்ட் எண்டில் இமேஜ் காட்ட முடியும்
-app.use('/uploads', express.static(uploadDir));
+// // Static Folder ஆக மாற்றுவதால் ஃபிரண்ட் எண்டில் இமேஜ் காட்ட முடியும்
+// app.use('/uploads', express.static(uploadDir));
 
 
-// MySQL டேட்டாபேஸ் இணைப்பு விபரங்கள்
-// const db = mysql.createConnection({
+// // MySQL டேட்டாபேஸ் இணைப்பு விபரங்கள்
+// // Using a connection pool so getConnection() and connection.release() work as expected
+// const db = mysql.createPool({
 //     host: 'localhost',
 //     user: 'root',      // உங்க MySQL யூசர்நேம் (வழக்கமாக root)
 //     password: 'root',      // உங்க MySQL பாஸ்வேர்ட் (இல்லைனா காலியாக விடவும்)
-//     database: 'jb_pos_db'
+//     database: 'jb_pos_db',
+//     waitForConnections: true,
+//     connectionLimit: 10,
+//     queueLimit: 0
 // });
 
 // const db = mysql.createConnection({
@@ -100,6 +104,67 @@ app.use('/uploads', express.static(uploadDir));
 //     console.log('Connected to MySQL Database successfully.');
 // });
 
+// const db = mysql.createPool({
+//     host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
+//     user: process.env.DB_USER || 'HojFcYtE4maWpx7.root',
+//     password: process.env.DB_PASSWORD || 'ACJUAvNSsHCThCM0',
+//     database: process.env.DB_NAME || 'jb_pos_db',
+//     port: process.env.DB_PORT || 4000,
+//     ssl: { rejectUnauthorized: false },
+//     waitForConnections: true,
+//     connectionLimit: 10,
+//     queueLimit: 0
+// });
+
+const express = require('express');
+const mysql = require('mysql2/promise');
+const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config();
+
+const app = express();
+
+// Middleware Configuration
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.use(express.json());
+
+// Uploads Folder Setup
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
+
+// Multer Storage Configuration
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: storage });
+
+app.use('/uploads', express.static(uploadDir));
+
+// MySQL Database Pool Connection
+// const db = mysql.createPool({
+//     host: 'localhost',
+//     user: 'root',      // உங்க MySQL யூசர்நேம் (வழக்கமாக root)
+//     password: 'root',      // உங்க MySQL பாஸ்வேர்ட் (இல்லைனா காலியாக விடவும்)
+//     database: 'jb_pos_db',
+//     waitForConnections: true,
+//     connectionLimit: 10,
+//     queueLimit: 0
+// });
+
 const db = mysql.createPool({
     host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
     user: process.env.DB_USER || 'HojFcYtE4maWpx7.root',
@@ -112,23 +177,21 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
-// Test the pool connection on start
-db.getConnection((err, connection) => {
-    if (err) {
-        console.error('Database connection failed:', err.message);
-        return;
-    }
-    console.log('Connected to Aiven MySQL Database successfully via Pool.');
-    connection.release(); // Release connection back to pool
-});
+db.getConnection()
+  .then(connection => {
+    console.log('Connected to MySQL Database successfully via Pool.');
+    connection.release();
+  })
+  .catch(err => {
+    console.error('Database connection failed:', err.message);
+  });
 
 // ====================================================================
-// 🔐 Node.js Backend Login Controller
+// AUTHENTICATION & USER SETUP
 // ====================================================================
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-
     const [rows] = await db.query(
       "SELECT id, username, role, linked_waiters FROM users WHERE username = ? AND password = ?", 
       [username, password]
@@ -136,7 +199,6 @@ app.post('/api/auth/login', async (req, res) => {
 
     if (rows && rows.length > 0) {
       const user = rows[0];
-      
       let linkedWaitersArray = [];
       if (user.linked_waiters) {
         try {
@@ -158,18 +220,16 @@ app.post('/api/auth/login', async (req, res) => {
       res.status(401).json({ error: "Invalid username or password!" });
     }
   } catch (err) {
-    // 💡 Print full error details to Render logs
-    console.error("Login API Detailed Error:", err.message, err.stack);
+    console.error("Login API Detailed Error:", err.message);
     res.status(500).json({ error: err.message || "Database Connection Failed" });
   }
 });
 
-// 1. புதிய லெட்ஜர் ஐடி தானாக உருவாக்க (Get Next Auto Ledger ID)
+// Ledger Setup APIs
 app.get('/api/ledgers/next-id', async (req, res) => {
     try {
         const currentYear = new Date().getFullYear().toString().slice(-2); 
         const idPrefix = `ID${currentYear}/`;
-
         const query = "SELECT ledger_id FROM ledgers WHERE ledger_id LIKE ? ORDER BY id DESC LIMIT 1";
         const [results] = await db.query(query, [`${idPrefix}%`]);
 
@@ -179,14 +239,12 @@ app.get('/api/ledgers/next-id', async (req, res) => {
             const lastNumber = parseInt(lastId.split('/')[1]); 
             nextNumber = lastNumber + 1;
         }
-
         res.json({ nextId: `${idPrefix}${nextNumber}` });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// 2. புதிய லெட்ஜர் சேமிக்க (Create Ledger)
 app.post('/api/ledgers', async (req, res) => {
     try {
         const { ledger_id, ledger_name, mobile_no, email_id, gstno, address } = req.body;
@@ -198,7 +256,6 @@ app.post('/api/ledgers', async (req, res) => {
     }
 });
 
-// 3. அனைத்து லெட்ஜர்களையும் எடுக்க (Read All Ledgers)
 app.get('/api/ledgers', async (req, res) => {
     try {
         const [results] = await db.query("SELECT * FROM ledgers ORDER BY ledger_name ASC");
@@ -208,7 +265,6 @@ app.get('/api/ledgers', async (req, res) => {
     }
 });
 
-// 4. லெட்ஜர் விபரங்களை மாற்றியமைக்க (Update Ledger)
 app.put('/api/ledgers/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -221,7 +277,6 @@ app.put('/api/ledgers/:id', async (req, res) => {
     }
 });
 
-// 5. லெட்ஜரை நீக்க (Delete Ledger)
 app.delete('/api/ledgers/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -235,8 +290,6 @@ app.delete('/api/ledgers/:id', async (req, res) => {
 // ==========================================
 // PRODUCT SETUP API MODULE
 // ==========================================
-
-// 1. விடுபட்ட அல்லது அடுத்த தயாரிப்பு குறியீட்டை எடுக்க
 app.get('/api/products/next-code', async (req, res) => {
     try {
         const [results] = await db.query("SELECT product_code FROM products ORDER BY product_code ASC");
@@ -251,7 +304,6 @@ app.get('/api/products/next-code', async (req, res) => {
     }
 });
 
-// 2. புதிய தயாரிப்பைச் சேமிக்க (Create Product)
 app.post('/api/products', async (req, res) => {
     try {
         const { product_code, product_name, tamil_product_name, ac_rate, non_ac_rate, hsn_code, product_group, tamil_product_group, unit } = req.body;
@@ -264,7 +316,6 @@ app.post('/api/products', async (req, res) => {
     }
 });
 
-// 3. அனைத்து தயாரிப்புகளையும் எடுக்க
 app.get('/api/products', async (req, res) => {
     try {
         const [results] = await db.query("SELECT * FROM products ORDER BY product_code ASC");
@@ -274,7 +325,6 @@ app.get('/api/products', async (req, res) => {
     }
 });
 
-// 4. தயாரிப்பு விபரங்களை மாற்றியமைக்க
 app.put('/api/products/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -287,7 +337,6 @@ app.put('/api/products/:id', async (req, res) => {
     }
 });
 
-// 5. தயாரிப்பை நீக்க
 app.delete('/api/products/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -298,7 +347,6 @@ app.delete('/api/products/:id', async (req, res) => {
     }
 });
 
-// 6. ஆங்கில தயாரிப்பு குழுக்களை மட்டும் எடுக்க
 app.get('/api/products/groups-en', async (req, res) => {
     try {
         const query = "SELECT product_group FROM products WHERE product_group IS NOT NULL AND product_group != '' GROUP BY product_group";
@@ -309,7 +357,6 @@ app.get('/api/products/groups-en', async (req, res) => {
     }
 });
 
-// 7. தமிழ் தயாரிப்பு குழுக்களை மட்டும் எடுக்க
 app.get('/api/products/groups-ta', async (req, res) => {
     try {
         const query = "SELECT tamil_product_group FROM products WHERE tamil_product_group IS NOT NULL AND tamil_product_group != '' GROUP BY tamil_product_group";
@@ -320,20 +367,7 @@ app.get('/api/products/groups-ta', async (req, res) => {
     }
 });
 
-// 1. சிஸ்டமில் உள்ள பிரிண்டர்கள்
-app.get('/api/system-printers', async (req, res) => {
-    try {
-        const printers = await getPrinters();
-        const printerNames = printers.map(p => p.name);
-        res.json(printerNames);
-    } catch (err) {
-        console.error("Error fetching system printers:", err);
-        res.json([]);
-    }
-});
-
-
-// 2. கம்பெனியைச் சேமிக்க அல்லது புதுப்பிக்க
+// Company Details Setup
 app.post('/api/companies/save-single', upload.single('image'), async (req, res) => {
     try {
         const { 
@@ -375,7 +409,6 @@ app.post('/api/companies/save-single', upload.single('image'), async (req, res) 
     }
 });
 
-// 3. கம்பெனி விபரங்களை எடுக்க
 app.get('/api/companies/single', async (req, res) => {
     try {
         const query = `
@@ -396,10 +429,7 @@ app.get('/api/companies/single', async (req, res) => {
     }
 });
 
-// ==========================================
-// WAITER SETUP APIS
-// ==========================================
-
+// Waiter Setup APIs
 app.get('/api/waiters/next-id', async (req, res) => {
     try {
         const [results] = await db.query("SELECT waiter_id FROM waiters ORDER BY id DESC LIMIT 1");
@@ -458,10 +488,7 @@ app.delete('/api/waiters/:id', async (req, res) => {
     }
 });
 
-// ==========================================
-// TABLE SETUP APIS
-// ==========================================
-
+// Table Setup APIs
 app.get('/api/tables', async (req, res) => {
     try {
         const [results] = await db.query("SELECT * FROM restaurant_tables ORDER BY CAST(table_no AS UNSIGNED) ASC, table_no ASC");
@@ -475,10 +502,7 @@ app.post('/api/tables', async (req, res) => {
     try {
         const { table_no } = req.body;
         const [results] = await db.query("SELECT * FROM restaurant_tables WHERE table_no = ?", [table_no]);
-        
-        if (results.length > 0) {
-            return res.status(400).json({ error: "Table Number already exists!" });
-        }
+        if (results.length > 0) return res.status(400).json({ error: "Table Number already exists!" });
         
         await db.query("INSERT INTO restaurant_tables (table_no) VALUES (?)", [table_no]);
         res.json({ message: "Table Saved Successfully!" });
@@ -491,11 +515,8 @@ app.put('/api/tables/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { table_no } = req.body;
-        
         const [results] = await db.query("SELECT * FROM restaurant_tables WHERE table_no = ? AND id != ?", [table_no, id]);
-        if (results.length > 0) {
-            return res.status(400).json({ error: "Table Number already exists!" });
-        }
+        if (results.length > 0) return res.status(400).json({ error: "Table Number already exists!" });
         
         await db.query("UPDATE restaurant_tables SET table_no = ? WHERE id = ?", [table_no, id]);
         res.json({ message: "Table Updated Successfully!" });
@@ -517,7 +538,6 @@ app.delete('/api/tables/:id', async (req, res) => {
 // ==========================================
 // ORDER POS SETUP APIS
 // ==========================================
-
 app.get('/api/orders/next-no', async (req, res) => {
     try {
         const [results] = await db.query("SELECT order_no FROM orders ORDER BY id DESC LIMIT 1");
@@ -535,7 +555,7 @@ app.get('/api/orders/next-no', async (req, res) => {
 app.post('/api/orders', async (req, res) => {
     const connection = await db.getConnection();
     try {
-        const { order_pfx, order_no, order_date, order_time, waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, items, is_print } = req.body;
+        const { order_pfx, order_no, order_date, order_time, waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, items } = req.body;
 
         const [tokenResults] = await connection.query("SELECT token_no FROM orders WHERE order_date = ? ORDER BY id DESC LIMIT 1", [order_date]);
 
@@ -558,19 +578,12 @@ app.post('/api/orders', async (req, res) => {
         await connection.query(itemQuery, [itemValues]);
         await connection.commit();
 
-        // ✅ token_no-வை Response-ல் சேர்க்க வேண்டும்
         res.json({ 
             message: "Order Processed Successfully!", 
             orderId: orderId,
             token_no: finalTokenNo 
         });
 
-        if (is_print === true || is_print === undefined) {
-            setTimeout(() => {
-                triggerCustomerBillPrint(orderId);
-                triggerKitchenKOTPrint(orderId);
-            }, 500);
-        }
     } catch (err) {
         await connection.rollback();
         res.status(500).json({ error: err.message });
@@ -616,268 +629,6 @@ app.delete('/api/orders/:id', async (req, res) => {
     }
 });
 
-// 🖨️ 1. CUSTOMER BILL PRINT
-async function triggerCustomerBillPrint(orderId) {
-    try {
-        const [companyResults] = await db.query("SELECT * FROM companies LIMIT 1");
-        if (companyResults.length === 0) return;
-        const company = companyResults[0];
-
-        const orderQuery = `
-            SELECT o.*, w.waiter_name, w.tamil_waiter_name, o.table_id as table_no, o.token_no 
-            FROM orders o
-            LEFT JOIN waiters w ON o.waiter_id = w.id
-            WHERE o.id = ?`;
-        const [orderResults] = await db.query(orderQuery, [orderId]);
-        if (orderResults.length === 0) return;
-        const order = orderResults[0];
-
-        const itemsQuery = `
-            SELECT oi.*, p.product_name, p.tamil_product_name 
-            FROM order_items oi
-            JOIN products p ON oi.product_id = p.id
-            WHERE oi.order_id = ?`;
-        const [itemResults] = await db.query(itemsQuery, [orderId]);
-
-        const totalQty = itemResults.reduce((sum, item) => sum + Number(item.qty), 0);
-        const printLanguage = company.sales_lang || 'English';
-        const displayWaiter = (printLanguage === 'Tamil' && order.tamil_waiter_name) ? order.tamil_waiter_name : order.waiter_name;
-
-        let htmlContent = `
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <style>
-                @import url('https://fonts.googleapis.com/css2?family=Hind+Madurai:wght@400;700&display=swap');
-                body { width: 280px; margin: 0; padding: 5px; font-family: 'Hind Madurai', sans-serif; font-size: 13px; color: #000; }
-                .center { text-align: center; }
-                .bold { font-weight: bold; }
-                .title { font-size: 18px; margin-bottom: 2px; text-transform: uppercase; }
-                .subtitle { font-size: 12px; margin-bottom: 10px; }
-                .line { border-top: 1px dashed #000; margin: 5px 0; }
-                .info-table, .items-table { width: 100%; border-collapse: collapse; }
-                .info-table td { padding: 2px 0; font-size: 12px; }
-                .items-table th { border-bottom: 1px dashed #000; text-align: left; padding: 4px 0; font-size: 12px; }
-                .items-table td { padding: 4px 0; vertical-align: top; }
-                .right { text-align: right; }
-                .total-section { font-size: 14px; margin-top: 5px; }
-            </style>
-        </head>
-        <body>
-            <div class="center">
-                <span class="bold title">${company.company_name}</span><br/>
-                <span class="subtitle">${company.address1 || ''} ${company.address2 || ''}</span>
-                ${company.gst_no ? `<br/><span class="subtitle">GSTIN: ${company.gst_no}</span>` : ''}
-            </div>
-            <div class="line"></div>
-            <table class="info-table">
-                <tr>
-                    <td><b>Order No:</b> ${order.order_pfx || ''}${order.order_no}</td>
-                    <td class="right"><b>Table:</b> ${order.table_no ? 'Table ' + order.table_no : 'N/A'}</td>
-                </tr>
-                <tr>
-                    <td><b>Date:</b> ${order.order_date}</td>
-                    <td class="right"><b>Time:</b> ${order.order_time}</td>
-                </tr>
-                <tr>
-                    <td><b>Waiter:</b> ${displayWaiter || 'N/A'}</td>
-                </tr>
-                <tr>
-                    <td class="right"><span style="font-size: 14px; font-weight: bold; border: 1px solid #000; padding: 1px 4px;">TOKEN: ${order.token_no || '001'}</span></td>
-                </tr>
-            </table>
-            <div class="line"></div>
-            <table class="items-table">
-                <thead>
-                    <tr>
-                        <th style="width: 50%;">Item</th>
-                        <th class="right" style="width: 20%;">Qty</th>
-                        <th class="right" style="width: 30%;">Amount</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-
-        itemResults.forEach(item => {
-            const displayProductName = (printLanguage === 'Tamil' && item.tamil_product_name) ? item.tamil_product_name : item.product_name;
-            htmlContent += `
-                <tr>
-                    <td>${displayProductName}</td>
-                    <td class="right">${item.qty}</td>
-                    <td class="right">₹${Number(item.value).toFixed(2)}</td>
-                </tr>`;
-        });
-
-        htmlContent += `
-                </tbody>
-            </table>
-            <div class="line"></div>
-            <table class="info-table total-section">
-                <tr class="bold">
-                    <td>Total Qty: ${totalQty}</td>
-                    <td class="right">Gross: ₹${Number(order.gross_value).toFixed(2)}</td>
-                </tr>
-                ${Number(order.gst_value) > 0 ? `
-                <tr>
-                    <td></td>
-                    <td class="right">GST (${order.gst_percent}%): ₹${Number(order.gst_value).toFixed(2)}</td>
-                </tr>` : ''}
-                <tr class="bold" style="font-size: 15px;">
-                    <td></td>
-                    <td class="right">NET TOTAL: ₹${Number(order.net_value).toFixed(2)}</td>
-                </tr>
-            </table>
-            <div class="line"></div>
-            <div class="center bold" style="margin-top: 8px; font-size: 11px;">
-                ${printLanguage === 'Tamil' ? '~ நன்றி! மீண்டும் வருக ~' : '~ Thank You! Visit Again ~'}
-            </div>
-        </body>
-        </html>`;
-
-        //const options = { width: '80mm', height: '200mm', border: '0' };
-        const options = { 
-            width: '80mm', 
-            border: '0',
-            type: 'pdf'
-            };
-        const tempPdfPath = path.join(__dirname, `temp_customer_print_${orderId}.pdf`);
-
-        pdf.create(htmlContent, options).toFile(tempPdfPath, (pdfErr) => {
-            if (pdfErr) return;
-            print(tempPdfPath)
-                .then(() => {
-                    console.log("Customer Bill printed successfully to Default Printer.");
-                    if(fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
-                })
-                .catch(pErr => {
-                    console.error("Default Printer Error:", pErr);
-                    if(fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
-                });
-        });
-    } catch (err) {
-        console.error("Customer Bill Error:", err);
-    }
-}
-
-// 🖨️ 2. KOT BILL PRINT
-async function triggerKitchenKOTPrint(orderId) {
-    try {
-        const [companyResults] = await db.query("SELECT * FROM companies LIMIT 1");
-        if (companyResults.length === 0) return;
-        const company = companyResults[0];
-
-        const targetPrinter = company.kot_printer;
-        const printLanguage = company.kot_lang || 'English';
-
-        if (!targetPrinter) return;
-
-        const orderQuery = `
-            SELECT o.*, w.waiter_name, w.tamil_waiter_name, o.table_id as table_no 
-            FROM orders o
-            LEFT JOIN waiters w ON o.waiter_id = w.id
-            WHERE o.id = ?`;
-        const [orderResults] = await db.query(orderQuery, [orderId]);
-        if (orderResults.length === 0) return;
-        const order = orderResults[0];
-
-        const itemsQuery = `
-            SELECT oi.*, p.product_name, p.tamil_product_name 
-            FROM order_items oi
-            JOIN products p ON oi.product_id = p.id
-            WHERE oi.order_id = ?`;
-        const [itemResults] = await db.query(itemsQuery, [orderId]);
-
-        const totalQty = itemResults.reduce((sum, item) => sum + Number(item.qty), 0);
-        const displayWaiter = (printLanguage === 'Tamil' && order.tamil_waiter_name) ? order.tamil_waiter_name : order.waiter_name;
-
-        let htmlContent = `
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <style>
-                @import url('https://fonts.googleapis.com/css2?family=Hind+Madurai:wght@400;700&display=swap');
-                body { width: 280px; margin: 0; padding: 5px; font-family: 'Hind Madurai', sans-serif; font-size: 14px; color: #000; }
-                .center { text-align: center; }
-                .bold { font-weight: bold; }
-                .title { font-size: 18px; margin-bottom: 2px; text-transform: uppercase; }
-                .line { border-top: 1px dashed #000; margin: 5px 0; }
-                .info-table, .items-table { width: 100%; border-collapse: collapse; }
-                .info-table td { padding: 2px 0; font-size: 13px; }
-                .items-table th { border-bottom: 1px dashed #000; text-align: left; padding: 5px 0; font-size: 13px; }
-                .items-table td { padding: 6px 0; vertical-align: top; font-size: 14px; }
-                .right { text-align: right; }
-            </style>
-        </head>
-        <body>
-            <div class="center">
-                <span class="bold title">** KOT / KITCHEN **</span><br/>
-                <span style="font-size:16px; font-weight:bold; background:#000; color:#fff; padding:2px 5px;">Token No: ${order.token_no}</span> 
-            </div>
-            <div class="line"></div>
-            <table class="info-table">
-                <tr><td><b>Order No:</b> ${order.order_pfx || ''}${order.order_no}</td><td class="right"><b>Table:</b> ${order.table_no ? 'Table ' + order.table_no : 'N/A'}</td></tr>
-                <tr><td><b>Date:</b> ${order.order_date}</td><td class="right"><b>Time:</b> ${order.order_time}</td></tr>
-                <tr><td colspan="2"><b>Waiter:</b> ${displayWaiter || 'N/A'}</td></tr>
-            </table>
-            <div class="line"></div>
-            <table class="items-table">
-                <thead>
-                    <tr>
-                        <th style="width: 25%;">Qty</th>
-                        <th style="width: 75%;">Item Name</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-
-        itemResults.forEach(item => {
-            const productName = item.product_name || item.tamil_product_name || `Item (${item.product_id})`;
-            const displayProductName = (printLanguage === 'Tamil' && item.tamil_product_name) ? item.tamil_product_name : productName;
-
-            htmlContent += `
-                <tr>
-                    <td class="bold" style="font-size: 16px;">${item.qty}</td>
-                    <td>${displayProductName}</td>
-                </tr>`;
-        });
-
-        htmlContent += `
-                </tbody>
-            </table>
-            <div class="line"></div>
-            <table class="info-table">
-                <tr class="bold"><td>TOTAL QTY: ${totalQty}</td></tr>
-            </table>
-            <div class="line"></div>
-        </body>
-        </html>`;
-
-        //const options = { width: '80mm', height: '200mm', border: '0' };
-        const options = { 
-        width: '80mm', 
-        border: '0',
-        type: 'pdf'
-        };
-        const tempPdfPath = path.join(__dirname, `temp_kot_print_${orderId}.pdf`);
-
-        pdf.create(htmlContent, options).toFile(tempPdfPath, async (pdfErr) => {
-            if (pdfErr) return;
-
-            try {
-                const allPrinters = await getPrinters();
-                const printerExists = allPrinters.some(p => p.name === targetPrinter);
-                if (printerExists) {
-                    await print(tempPdfPath, { printer: targetPrinter });
-                }
-            } catch (err) {
-                console.error("KOT Print Error:", err);
-            } finally {
-                if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
-            }
-        });
-    } catch (err) {
-        console.error("KOT Setup Error:", err);
-    }
-}
-
 app.get('/api/product-groups', async (req, res) => {
     try {
         const query = `
@@ -916,7 +667,6 @@ app.get('/api/orders/pending-tokens', async (req, res) => {
     }
 });
 
-// 1. குறிப்பிட்ட ஆர்டரின் முழு விபரங்கள்
 app.get('/api/orders/:id', async (req, res) => {
     try {
         const orderId = req.params.id;
@@ -940,7 +690,7 @@ app.put('/api/orders/:id', async (req, res) => {
     const connection = await db.getConnection();
     try {
         const orderId = req.params.id;
-        const { waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, items, is_print } = req.body;
+        const { waiter_id, table_id, order_type, gross_value, gst_percent, gst_value, net_value, items } = req.body;
 
         await connection.beginTransaction();
 
@@ -961,19 +711,12 @@ app.put('/api/orders/:id', async (req, res) => {
         const [ordRow] = await connection.query("SELECT token_no FROM orders WHERE id = ?", [orderId]);
         const existingToken = ordRow.length > 0 ? ordRow[0].token_no : '001';
 
-        // ✅ finalTokenNo-வுக்கு பதிலாக existingToken பயன்படுத்தவும்
         res.json({ 
             message: "Order Processed Successfully!", 
             orderId: orderId,
             token_no: existingToken 
         });
 
-        if (is_print === true || is_print === undefined) {
-            setTimeout(() => {
-                triggerCustomerBillPrint(orderId);
-                triggerKitchenKOTPrint(orderId);
-            }, 500);
-        }
     } catch (err) {
         await connection.rollback();
         res.status(500).json({ error: err.message });
@@ -981,10 +724,8 @@ app.put('/api/orders/:id', async (req, res) => {
         connection.release();
     }
 });
-// ==========================================
-// USER PASSWORD & PERMISSION SETUP APIS
-// ==========================================
 
+// Setup & Users APIs
 app.get('/api/setup/users', async (req, res) => {
     try {
         const query = "SELECT id, username, role, permitted_menus, linked_waiters FROM users ORDER BY username ASC";
@@ -1054,23 +795,17 @@ app.delete('/api/setup/users/:id', async (req, res) => {
     }
 });
 
-// ==========================================
-// 💳 SALES MODULE APIS & AUTO BILL NUMBER
-// ==========================================
-
+// Sales Module APIs
 function getCurrentFinancialYear() {
     const today = new Date();
     const month = today.getMonth() + 1;
     const year = today.getFullYear();
-    
     let startYear = year;
     let endYear = year + 1;
-
     if (month < 4) {
         startYear = year - 1;
         endYear = year;
     }
-
     return `${startYear.toString().slice(-2)}-${endYear.toString().slice(-2)}`;
 }
 
@@ -1078,7 +813,6 @@ app.get('/api/sales/next-bill-no', async (req, res) => {
     try {
         const fy = getCurrentFinancialYear();
         const prefix = `S ${fy}/`;
-
         const query = "SELECT bill_no FROM sales WHERE bill_no LIKE ? ORDER BY id DESC LIMIT 1";
         const [results] = await db.query(query, [`${prefix}%`]);
 
@@ -1141,19 +875,13 @@ app.post('/api/sales', async (req, res) => {
             const itemValues = items.map(i => [newOrderId, i.product_id, i.qty, i.rate, i.value]);
             await db.query("INSERT INTO order_items (order_id, product_id, qty, rate, value) VALUES ?", [itemValues]);
 
-            // Save Sales
             const salesQuery = `
                 INSERT INTO sales (bill_no, order_id, token_no, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned, sales_date)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             `;
             const [sResult] = await db.query(salesQuery, [finalBillNo, newOrderId, newTokNo, table_id, gross_value, discount, net_payable, payment_mode, received_amount, balance_returned]);
 
-            res.json({ success: true, sales_id: sResult.insertId, bill_no: finalBillNo });
-
-            setTimeout(() => {
-                triggerCustomerBillPrint(newOrderId);
-                triggerKitchenKOTPrint(newOrderId);
-            }, 500);
+            res.json({ success: true, sales_id: sResult.insertId, bill_no: finalBillNo, order_id: newOrderId });
 
         } else {
             const salesQuery = `
@@ -1166,11 +894,7 @@ app.post('/api/sales', async (req, res) => {
                 await db.query("UPDATE orders SET status = 'COMPLETED' WHERE id = ?", [order_id]);
             }
 
-            res.json({ success: true, sales_id: sResult.insertId, bill_no: finalBillNo });
-
-            setTimeout(() => {
-                if (order_id) triggerCustomerBillPrint(order_id);
-            }, 500);
+            res.json({ success: true, sales_id: sResult.insertId, bill_no: finalBillNo, order_id: order_id });
         }
     } catch (err) {
         console.error("Sales Save Error:", err);
@@ -1205,11 +929,7 @@ app.delete('/api/sales/:id', async (req, res) => {
     const connection = await db.getConnection();
     try {
         const salesId = req.params.id;
-
-        const [salesRows] = await connection.query(
-            "SELECT order_id, token_no FROM sales WHERE id = ?", 
-            [salesId]
-        );
+        const [salesRows] = await connection.query("SELECT order_id, token_no FROM sales WHERE id = ?", [salesId]);
 
         if (salesRows.length === 0) {
             connection.release();
@@ -1217,25 +937,16 @@ app.delete('/api/sales/:id', async (req, res) => {
         }
 
         const { order_id } = salesRows[0];
-
         await connection.beginTransaction();
-
         await connection.query("DELETE FROM sales WHERE id = ?", [salesId]);
 
         if (order_id) {
-            const [orderRows] = await connection.query(
-                "SELECT order_type, waiter_id FROM orders WHERE id = ?", 
-                [order_id]
-            );
-
+            const [orderRows] = await connection.query("SELECT order_type, waiter_id FROM orders WHERE id = ?", [order_id]);
             if (orderRows.length > 0 && (!orderRows[0].waiter_id || orderRows[0].order_type === 'DIRECT')) {
                 await connection.query("DELETE FROM order_items WHERE order_id = ?", [order_id]);
                 await connection.query("DELETE FROM orders WHERE id = ?", [order_id]);
             } else {
-                await connection.query(
-                    "UPDATE orders SET status = 'PENDING' WHERE id = ?", 
-                    [order_id]
-                );
+                await connection.query("UPDATE orders SET status = 'PENDING' WHERE id = ?", [order_id]);
             }
         }
 
@@ -1251,26 +962,7 @@ app.delete('/api/sales/:id', async (req, res) => {
     }
 });
 
-app.get('/api/sales/reprint/:id', async (req, res) => {
-    try {
-        const salesId = req.params.id;
-        const [results] = await db.query("SELECT order_id FROM sales WHERE id = ?", [salesId]);
-        
-        if (results.length === 0) return res.status(404).json({ error: "Sales bill not found" });
-        
-        const orderId = results[0].order_id;
-        if (orderId) {
-            triggerCustomerBillPrint(orderId);
-            res.json({ message: "Re-print triggered successfully!" });
-        } else {
-            res.status(400).json({ error: "No associated order found for re-print" });
-        }
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 1. Financial Years List API Update
+// Dashboard APIs
 app.get('/api/dashboard/financial-years', async (req, res) => {
     try {
         const query = `
@@ -1285,27 +977,22 @@ app.get('/api/dashboard/financial-years', async (req, res) => {
         `;
         const [results] = await db.query(query);
         let years = results.map(r => r.fy).filter(Boolean);
-        
-        // Default current financial year
-        const currentFY = getCurrentFinancialYear(); // Returns '26-27'
+        const currentFY = getCurrentFinancialYear();
         const parts = currentFY.split('-');
-        const formattedCurrentFY = `20${parts[0]}-20${parts[1]}`; // '2026-2027'
+        const formattedCurrentFY = `20${parts[0]}-20${parts[1]}`;
         
         if (!years.includes(formattedCurrentFY)) {
             years.unshift(formattedCurrentFY);
         }
-        
         res.json(years);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// 2. Real-time Dashboard Stats API Update
 app.get('/api/dashboard/stats', async (req, res) => {
     try {
-        let { fy } = req.query; // Format: "2026-2027"
-        
+        let { fy } = req.query;
         if (!fy || fy === 'undefined' || fy === 'null') {
             const currentFY = getCurrentFinancialYear();
             const parts = currentFY.split('-');
@@ -1316,7 +1003,6 @@ app.get('/api/dashboard/stats', async (req, res) => {
         const startDate = `${startYearStr}-04-01 00:00:00`;
         const endDate = `${endYearStr}-03-31 23:59:59`;
 
-        // Today Sales
         const todayDate = new Date().toISOString().slice(0, 10);
         const [todayStats] = await db.query(
             `SELECT COUNT(id) AS todayBillCount, IFNULL(SUM(net_payable), 0) AS todayTotalAmount 
@@ -1324,7 +1010,6 @@ app.get('/api/dashboard/stats', async (req, res) => {
             [todayDate]
         );
 
-        // Monthwise Sales Data
         const [monthStats] = await db.query(
             `SELECT 
                 MONTH(sales_date) as month_num,
@@ -1370,8 +1055,145 @@ app.get('/api/dashboard/stats', async (req, res) => {
     }
 });
 
-// சர்வர் போர்ட் ரன் செய்தல்
-const PORT = 5000;
+// ==========================================
+// SALES REPORT FILTER & SUMMARY API (FIXED)
+// ==========================================
+
+app.get('/api/reports/sales-report', async (req, res) => {
+    try {
+        const { from_date, to_date, waiter_id, table_id, report_type, payment_modes } = req.query;
+
+        // 1. Mandatory Date Check
+        if (!from_date || !to_date) {
+            return res.status(400).json({ error: "from_date and to_date are required." });
+        }
+
+        // 2. Exact Full-Day Datetime Boundaries
+        const startDateTime = `${from_date} 00:00:00`;
+        const endDateTime = `${to_date} 23:59:59`;
+
+        let modeArray = [];
+        if (payment_modes && payment_modes.trim() !== '') {
+            modeArray = payment_modes.split(',');
+        }
+
+        let query = '';
+        let params = [];
+
+        if (report_type === 'DETAIL') {
+            query = `
+                SELECT 
+                    s.id AS sales_id,
+                    s.bill_no,
+                    s.sales_date,
+                    s.payment_mode,
+                    IFNULL(w.waiter_name, 'Counter') AS waiter_name,
+                    IFNULL(t.table_no, 'N/A') AS table_no,
+                    IFNULL(p.product_name, 'General Item') AS product_name,
+                    IFNULL(oi.qty, 1) AS qty,
+                    IFNULL(oi.rate, s.gross_value) AS rate,
+                    IFNULL(oi.value, s.gross_value) AS value,
+                    IFNULL(o.gst_value, 0) AS gst_value,
+                    s.discount,
+                    s.net_payable AS nett_value
+                FROM sales s
+                LEFT JOIN orders o ON s.order_id = o.id
+                LEFT JOIN order_items oi ON o.id = oi.order_id
+                LEFT JOIN products p ON oi.product_id = p.id
+                LEFT JOIN waiters w ON o.waiter_id = w.id
+                LEFT JOIN restaurant_tables t ON s.table_id = t.id
+                WHERE s.sales_date >= ? AND s.sales_date <= ?
+            `;
+            params.push(startDateTime, endDateTime);
+
+            if (waiter_id && waiter_id !== '') {
+                query += ` AND o.waiter_id = ? `;
+                params.push(waiter_id);
+            }
+            if (table_id && table_id !== '') {
+                query += ` AND s.table_id = ? `;
+                params.push(table_id);
+            }
+            if (modeArray.length > 0) {
+                let expandedModes = [];
+                modeArray.forEach(m => {
+                    const lowerM = m.trim().toLowerCase();
+                    if (lowerM === 'card' || lowerM === 'credit') {
+                        expandedModes.push('card', 'credit', 'credit/card', 'card/credit');
+                    } else {
+                        expandedModes.push(lowerM);
+                    }
+                });
+
+                query += ` AND LOWER(TRIM(s.payment_mode)) IN (${expandedModes.map(() => '?').join(',')}) `;
+                params.push(...expandedModes);
+            }
+
+            query += ` ORDER BY s.id DESC`;
+
+        } else {
+            // SUMMARY REPORT
+            query = `
+                SELECT 
+                    s.id AS sales_id,
+                    s.bill_no,
+                    s.sales_date,
+                    s.payment_mode,
+                    IFNULL(w.waiter_name, 'Counter') AS waiter_name,
+                    IFNULL(t.table_no, 'N/A') AS table_no,
+                    s.gross_value,
+                    IFNULL(o.gst_value, 0) AS gst_value,
+                    s.discount,
+                    s.net_payable AS nett_value
+                FROM sales s
+                LEFT JOIN orders o ON s.order_id = o.id
+                LEFT JOIN waiters w ON o.waiter_id = w.id
+                LEFT JOIN restaurant_tables t ON s.table_id = t.id
+                WHERE s.sales_date >= ? AND s.sales_date <= ?
+            `;
+            params.push(startDateTime, endDateTime);
+
+            if (waiter_id && waiter_id !== '') {
+                query += ` AND o.waiter_id = ? `;
+                params.push(waiter_id);
+            }
+            if (table_id && table_id !== '') {
+                query += ` AND s.table_id = ? `;
+                params.push(table_id);
+            }
+            if (modeArray.length > 0) {
+                let expandedModes = [];
+                modeArray.forEach(m => {
+                    const lowerM = m.trim().toLowerCase();
+                    if (lowerM === 'card' || lowerM === 'credit') {
+                        expandedModes.push('card', 'credit', 'credit/card', 'card/credit');
+                    } else {
+                        expandedModes.push(lowerM);
+                    }
+                });
+
+                query += ` AND LOWER(TRIM(s.payment_mode)) IN (${expandedModes.map(() => '?').join(',')}) `;
+                params.push(...expandedModes);
+            }
+
+            query += ` ORDER BY s.id DESC`;
+        }
+
+        console.log("Executing Fixed Sales Report Query:", query);
+        console.log("With Params:", params);
+
+        const [results] = await db.query(query, params);
+        console.log("Fetched Rows Count:", results.length);
+
+        res.json(results);
+
+    } catch (err) {
+        console.error("Sales Report Error:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Backend Server running on port ${PORT}`);
 });
